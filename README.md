@@ -8,9 +8,9 @@ Now some might follow [this](https://docs.unrealengine.com/4.27/en-US/SharingAnd
 
 1. Get [Lutris](https://lutris.net/downloads) (Preferably not snap)
 2. Download [wine](https://github.com/lutris/docs/blob/master/WineDependencies.md) (just in case)
-
-```sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine64 wine32 libasound2-plugins:i386 libsdl2-2.0-0:i386 libdbus-1-3:i386 libsqlite3-0:i386```
-
+```
+sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine64 wine32 libasound2-plugins:i386 libsdl2-2.0-0:i386 libdbus-1-3:i386 libsqlite3-0:i386
+```
 3. Get [Epic Games Store](https://lutris.net/games/epic-games-store/)
 4. Download Unreal Engine 4.27
 - (optional) Remove optional garbage
