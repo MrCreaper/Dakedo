@@ -1,0 +1,19 @@
+{
+  "name": "drg-linux-compiler",
+  "version": "1.0.0",
+  "description": "",
+  "main": "compile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrCreaper/drg-linux-modding.git"
+  },
+  "author": "Mr.Creaper",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/MrCreaper/drg-linux-modding/issues"
+  },
+  "homepage": "https://github.com/MrCreaper/drg-linux-modding#readme"
+}
