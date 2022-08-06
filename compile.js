@@ -4,6 +4,7 @@ const child = require(`child_process`);
 const beautify = require('beautify');
 const readline = require('readline');
 const path = require('path');
+const find = require('find-process');
 
 (async () => {
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0]));
@@ -17,6 +18,7 @@ const path = require('path');
         SteamInstall: "/home/me/.local/share/Steam/steamapps/common/Deep Rock Galactic",
         logs: "./logs.txt", // empty for no logs
         startDRG: false,
+        dontKillDRG: false,
         leaveWhenDone: true,
     };
 
@@ -101,29 +103,46 @@ const path = require('path');
             fs.mkdirSync(`./temp/`);
         fs.writeFileSync(`./temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
         fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `./temp/PackageInput/Content/`, { overwrite: true });
+        fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `./temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-        child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create='${W__dirname}/temp/Input.txt'"`)
+        child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`)
             .on('exit', async () => {
-                console.log(`Packer fucked off.`);
+                var d = fs.readFileSync(config.logs);
+                if (d.includes(`LogPakFile: Error: Failed to load `)) {
+                    console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                    await keypress();
+                    exitHandler();
+                }
+                if (!config.dontKillDRG) {
+                    var prcList = await find('name', 'FSD');
+                    //console.log(prcList);
+                    prcList.forEach(x => {
+                        if (x.cmd.toLocaleLowerCase().replace(/\\/g,`/`).includes(`/steam/`))
+                            process.kill(x.pid);
+                    })
+                }
+                // godda kill before adding
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`./temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
+                console.log(`Done!`);
 
-                if (config.startDRG)
-                    await new Promise(r => {
-                        child.exec(`steam steam://rungameid/548430`).on(`exit`, () => {
-                            console.log(`Lauched DRG`);
+                if (config.startDRG) {
+                    await new Promise(r =>
+                        child.exec(`steam steam://rungameid/548430`)
+                        .on(`exit`, () => {
+                            console.log(`Lauched DRG`); // most likely
+                            exitHandler();
                             r();
                         })
-                            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d))); // most likely
-                    })
-
-                console.log(`Done!`);
-                if (!config.leaveWhenDone) {
-                    console.log("Press enter to get out!");
-                    await keypress();
-                }
-                exitHandler();
+                        .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
+                    )
+                } else
+                    if (!config.leaveWhenDone) {
+                        console.log("Press enter to get out!");
+                        await keypress();
+                        exitHandler();
+                    } else exitHandler();
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }

@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/MrCreaper/drg-linux-modding/issues"
   },
-  "homepage": "https://github.com/MrCreaper/drg-linux-modding#readme"
+  "homepage": "https://github.com/MrCreaper/drg-linux-modding#readme",
+  "dependencies": {
+    "find-process": "^1.4.7"
+  }
 }
