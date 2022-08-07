@@ -2,12 +2,11 @@ const fs = require(`fs`);
 const fse = require('fs-extra');
 const child = require(`child_process`);
 const beautify = require('beautify');
-const readline = require('readline');
 const path = require('path');
 const find = require('find-process');
 
 (async () => {
-    __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0]));
+    __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
 
     var config = {
@@ -32,9 +31,9 @@ const find = require('find-process');
     }
     const keypress = async () => {
         process.stdin.setRawMode(true)
-        return new Promise(resolve => process.stdin.once('data', () => {
-            process.stdin.setRawMode(false)
-            resolve()
+        return new Promise(r => process.stdin.once('data', () => {
+            process.stdin.setRawMode(false);
+            r();
         }))
     }
 
@@ -49,15 +48,19 @@ const find = require('find-process');
             exitHandler();
             return;
         }
-        config = JSON.parse(tempconfig);
+        tempconfig = JSON.parse(tempconfig);
+        Object.keys(config).forEach(x => {
+            if (tempconfig[x] && typeof config[x] == typeof tempconfig[x])
+                config[x] = tempconfig[x];
+        });
     }
     writeConfig(config);
     function writeConfig(c) {
         fs.writeFileSync(configPath, beautify(JSON.stringify(c), { format: 'json' }));
     }
 
-    if (!fs.existsSync(`${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe`)) return console.log(`Engine not found!\n${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe`);
-    if (!fs.existsSync(`${config.SteamInstall}`)) return console.log(`DRG not found!\n${config.SteamInstall}`);
+    if (process.argv.includes(`-drg`))
+        config.startDRG = !config.startDRG;
 
     var logsDisabled = false;
     if (!config.logs) {
@@ -117,7 +120,7 @@ const find = require('find-process');
                     var prcList = await find('name', 'FSD');
                     //console.log(prcList);
                     prcList.forEach(x => {
-                        if (x.cmd.toLocaleLowerCase().replace(/\\/g,`/`).includes(`/steam/`))
+                        if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
                             process.kill(x.pid);
                     })
                 }
@@ -130,12 +133,12 @@ const find = require('find-process');
                 if (config.startDRG) {
                     await new Promise(r =>
                         child.exec(`steam steam://rungameid/548430`)
-                        .on(`exit`, () => {
-                            console.log(`Lauched DRG`); // most likely
-                            exitHandler();
-                            r();
-                        })
-                        .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
+                            .on(`exit`, () => {
+                                console.log(`Lauched DRG`); // most likely
+                                exitHandler();
+                                r();
+                            })
+                            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
                     )
                 } else
                     if (!config.leaveWhenDone) {
