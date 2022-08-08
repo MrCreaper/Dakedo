@@ -1,10 +1,32 @@
 # DRG Linux Modding
 
-## Problems with the virgin native ue4
+## [Native](https://docs.unrealengine.com/4.27/en-US/SharingAndReleasing/Linux/BeginnerLinuxDeveloper/SettingUpAnUnrealWorkflow/) pros and cons
+### pros
+- native speed
 
-Now some might follow [this](https://docs.unrealengine.com/4.27/en-US/SharingAndReleasing/Linux/BeginnerLinuxDeveloper/SettingUpAnUnrealWorkflow/) offical guide. But.. if you do it like that, its annoying to compile for windows, modio kinda dosent work etc. etc.
+### cons
+- a bit more work to setup
+ - download, compile
+ - windows compiling setup (never figured it out xd)
+- converting windows projects
+- no marketplace
+- modio broken
 
-## Getting the chad wine ue4
+## Wine pros and cons
+### pros
+- can use modio
+- takes (prob) less time to setup
+ - can download
+- marketplace works
+
+### cons
+- some graphical glitches
+ - "compiling shaders" just randomlly appearing in random spots
+ - frozen screen areas
+- epic games shortcut dosent launch UE
+ - so godda launch with the epic games launcher
+
+## Getting wine (windows) ue4
 
 1. Get [Lutris](https://lutris.net/downloads) (Preferably not snap)
 2. Download [wine](https://github.com/lutris/docs/blob/master/WineDependencies.md) (just in case)
@@ -18,8 +40,10 @@ sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine
 6. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases) of this (unless you wana run it raw with node) and add to the project folder, **IN ITS OWN SPECIAL LITTLE FOLDER**
 - (optional) make a link to the compiler :)
 7. Run for first time setup
-8. Setup config.json
+- Setup config.json
 
-## development
+## Compiler
+Adding "-drg" to the command temporarily toggles if drg will be launched.
 
+### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)

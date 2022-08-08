@@ -78,23 +78,27 @@ const find = require('find-process');
             console.log(err);
         process.exit();
     }
-
     process.on('exit', exitHandler);
-
     //catches ctrl+c event
     process.on('SIGINT', exitHandler);
-
     // catches "kill pid" (for example: nodemon restart)
     process.on('SIGUSR1', exitHandler);
     process.on('SIGUSR2', exitHandler);
-
     //catches uncaught exceptions
     process.on('uncaughtException', exitHandler);
 
     fs.writeFileSync(config.logs, ``);
 
     console.log(config);
-    fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
+    var maxConfigKeyLenght = 0;
+    Object.keys(config).forEach(x => {
+        if (x.length > maxConfigKeyLenght)
+            maxConfigKeyLenght = x.length;
+    });
+    Object.keys(config).forEach(x =>
+        fs.appendFileSync(config.logs, `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${config[x]}\n`)
+    );
+    //fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
 
     function pack() {
         console.log(`packing ${config.ModName}...`);
@@ -116,14 +120,6 @@ const find = require('find-process');
                     await keypress();
                     exitHandler();
                 }
-                if (!config.dontKillDRG) {
-                    var prcList = await find('name', 'FSD');
-                    //console.log(prcList);
-                    prcList.forEach(x => {
-                        if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
-                            process.kill(x.pid);
-                    })
-                }
                 // godda kill before adding
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
@@ -131,6 +127,14 @@ const find = require('find-process');
                 console.log(`Done!`);
 
                 if (config.startDRG) {
+                    if (!config.dontKillDRG) {
+                        var prcList = await find('name', 'FSD');
+                        //console.log(prcList);
+                        prcList.forEach(x => {
+                            if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
+                                process.kill(x.pid);
+                        })
+                    }
                     await new Promise(r =>
                         child.exec(`steam steam://rungameid/548430`)
                             .on(`exit`, () => {
