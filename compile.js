@@ -177,7 +177,7 @@ function formatTime(time) {
         const id = fs.readdirSync(`${__dirname}/backups`).length;
         var buf = `${__dirname}/backups/${id} - ${new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
         fs.mkdirSync(buf);
-        fse.copySync(`${__dirname}/${config.ModName}`, `${buf}/${config.ModName}`);
+        fse.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
         console.log(`Backup done! id: ${id}`);
     }
 
