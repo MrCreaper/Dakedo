@@ -82,6 +82,8 @@ function formatTime(time) {
         startDRG: false,
         dontKillDRG: false,
         leaveWhenDone: true,
+        backupOnCompile: true,
+        MaxBackups: -1,
     };
 
     function isJsonString(str) {
