@@ -24,8 +24,9 @@ function formatTime(time) {
 
 (async () => {
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
+    var updateCompleted = false;
     async function update() {
-        const version = require(`${__dirname}/package.json`).version;
+        const version = require(`./package.json`).version;
         const repo = `MrCreaper/drg-linux-modding`;
         return new Promise(async r => {
             var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
@@ -45,6 +46,7 @@ function formatTime(time) {
                         down.pipe(file
                             .on(`finish`, () => {
                                 file.close();
+                                updateCompleted = true;
                                 console.log(`Update finished! ${version} => ${resp.tag_name}`);
                                 r();
                             }))
@@ -57,7 +59,7 @@ function formatTime(time) {
     const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
 
     var ignoredDirs = [];
-    fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`,`utf8`).split(`\n`).forEach(x => {
+    fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`, `utf8`).split(`\n`).forEach(x => {
         ignoredDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``));
     });
 
@@ -133,6 +135,8 @@ function formatTime(time) {
     async function exitHandler(err, skip = false) {
         if (fs.existsSync(`${__dirname}/temp/`))
             fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
+        if (!updateCompleted && fs.existsSync(`${__dirname}/compile`))
+            fs.rmSync(`${__dirname}/compile`);
         if (cookingChild)
             cookingChild.destroy();
         if (err && err != `SIGINT`)
@@ -217,6 +221,11 @@ function formatTime(time) {
         fse.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
     }
 
+    // just becomes hidden, for some reason.. and then, bug reporter jumpscare for .1s
+    //if (process.argv.includes(`-ue`))
+    //return child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
+    //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
+    
     function pack() {
         console.log(`packing ${config.ModName}...`);
         fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n\n`);
