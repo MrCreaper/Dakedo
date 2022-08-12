@@ -169,16 +169,49 @@ function formatTime(time) {
 
     if (process.argv.includes(`-bu`))
         return backup();
+    if (config.backupOnCompile)
+        backup();
 
     function backup() {
-        console.log(`Making backup...`);
-        if (!fs.existsSync(`${__dirname}/backups`))
-            fs.mkdirSync(`${__dirname}/backups`);
-        const id = fs.readdirSync(`${__dirname}/backups`).length;
-        var buf = `${__dirname}/backups/${id} - ${new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
-        fs.mkdirSync(buf);
-        fse.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
-        console.log(`Backup done! id: ${id}`);
+        return new Promise(r => {
+            console.log(`Making backup...`);
+            if (!fs.existsSync(`${__dirname}/backups`))
+                fs.mkdirSync(`${__dirname}/backups`);
+            if (config.MaxBackups != -1) {
+                var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
+                    var aid = a.split(` - `)[0];
+                    if (isNaN(aid)) return;
+                    aid = parseInt(aid);
+
+                    var bid = b.split(` - `)[0];
+                    if (isNaN(bid)) return;
+                    bid = parseInt(bid);
+
+                    if (aid < bid) return -1;
+                    if (aid > bid) return 1;
+                    return 0;
+                }); // oldest => newest
+                backups.forEach((x, i) => {
+                    //if(i == 0) return; // keep oldest as a keepsake
+                    if (backups.length - i > config.MaxBackups)
+                        fs.rm(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                });
+            }
+            var id = -1;
+            fs.readdirSync(`${__dirname}/backups`).forEach(x => {
+                var xid = x.split(` - `)[0];
+                if (isNaN(xid) && xid != `0`) return console.log(`invalid ${x}`);
+                xid = parseInt(xid);
+                if (xid > id)
+                    id = xid;
+            });
+            id++;
+            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
+            fs.mkdirSync(buf);
+            fse.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
+            console.log(`Backup done! id: ${id}`);
+            r();
+        })
     }
 
     if (process.argv.find(x => x.includes(`-lbu`)))
@@ -197,7 +230,7 @@ function formatTime(time) {
         var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
         if (!backuppath) return console.log(`Invalid backup id!`);
         var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
-        console.log(`Loading backup ${folder.split(` - `)[0]} from${formatTime(new Date() - new Date(folder.split(` - `)[1]))} ago`);
+        console.log(`Loading backup ${folder.split(` - `)[0]} from${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
         var configFile = `${__dirname}/../Config/DefaultGame.ini`;
         var read = fs.readFileSync(configFile);
         if (!read.includes(`\n+DirectoriesToNeverCook=(Path="/Game/${config.ModName} Latest`)) { // add to never cook
@@ -225,7 +258,7 @@ function formatTime(time) {
     //if (process.argv.includes(`-ue`))
     //return child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
-    
+
     function pack() {
         console.log(`packing ${config.ModName}...`);
         fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n\n`);
