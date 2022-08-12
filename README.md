@@ -14,10 +14,10 @@
 
 ## Wine pros and cons
 ### pros
-- can use modio
+- marketplace works
+  - can use modio
 - takes (prob) less time to setup
   - can download
-- marketplace works
 
 ### cons
 - some graphical glitches

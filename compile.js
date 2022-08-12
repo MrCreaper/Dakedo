@@ -126,7 +126,7 @@ function formatTime(time) {
 
     if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
 
-    if (process.argv.includes(`-verify`))return;
+    if (process.argv.includes(`-verify`)) return;
 
     if (process.argv.includes(`-drg`))
         config.startDRG = !config.startDRG;
@@ -220,13 +220,17 @@ function formatTime(time) {
         return loadbackup(process.argv.find(x => x.includes(`-lbu`)).replace(`-lbu`, ``));
 
     function loadbackup(id) {
-        if (!id && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
-            console.log(`Unloading backup...`);
-            if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`))
-                fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
-            fs.renameSync(`${__dirname}/../Content/${config.ModName} Latest`, `${__dirname}/../Content/${config.ModName}`);
-            console.log(`Unloaded backup.`);
-            return;
+        if (!id) {
+            if (!fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`))
+                console.log(`Missing id.`)
+            else {
+                console.log(`Unloading backup...`);
+                if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`))
+                    fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
+                fs.renameSync(`${__dirname}/../Content/${config.ModName} Latest`, `${__dirname}/../Content/${config.ModName}`);
+                console.log(`Unloaded backup.`);;
+                return;
+            }
         }
         if (!isNaN(id) && !Number.isInteger(parseInt(id))) return console.log(`Invalid id. ${id}`);
         var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
@@ -316,7 +320,7 @@ function formatTime(time) {
     }
 
     if (config.backupOnCompile)
-       await backup();
+        await backup();
     console.log(`cooking ${config.ModName}...`);
     fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
     var cookingChild = child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`)
