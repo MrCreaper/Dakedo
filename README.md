@@ -23,8 +23,10 @@
 - some graphical glitches
  - "compiling shaders" just randomlly appearing in random spots
  - frozen screen areas
+- input intake random sometimes?
 - epic games shortcut dosent launch UE
- - so godda launch with the epic games launcher
+ - godda launch with the epic games launcher
+- something must be leaking memory
 
 ## Getting wine (windows) ue4
 
