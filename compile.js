@@ -124,6 +124,10 @@ function formatTime(time) {
         fs.writeFileSync(configPath, beautify(JSON.stringify(c), { format: 'json' }));
     }
 
+    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
+
+    if (process.argv.includes(`-verify`))return;
+
     if (process.argv.includes(`-drg`))
         config.startDRG = !config.startDRG;
 
@@ -167,12 +171,8 @@ function formatTime(time) {
     );
     //fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
 
-    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
-
     if (process.argv.includes(`-bu`))
         return backup();
-    if (config.backupOnCompile)
-        backup();
 
     function backup() {
         return new Promise(r => {
@@ -315,6 +315,8 @@ function formatTime(time) {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
+    if (config.backupOnCompile)
+       await backup();
     console.log(`cooking ${config.ModName}...`);
     fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
     var cookingChild = child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`)
