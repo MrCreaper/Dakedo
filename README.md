@@ -6,8 +6,8 @@
 
 ### cons
 - a bit more work to setup
- - download, compile
- - windows compiling setup (never figured it out xd)
+  - download, compile
+  - windows compiling setup (never figured it out xd)
 - converting windows projects
 - no marketplace
 - modio broken
@@ -16,15 +16,15 @@
 ### pros
 - can use modio
 - takes (prob) less time to setup
- - can download
+  - can download
 - marketplace works
 
 ### cons
 - some graphical glitches
- - "compiling shaders" just randomlly appearing in random spots
- - frozen screen areas
+  - "compiling shaders" just randomlly appearing in random spots
+  - frozen screen areas
 - epic games shortcut dosent launch UE
- - so godda launch with the epic games launcher
+  - so godda launch with the epic games launcher
 
 ## Getting wine (windows) ue4
 
@@ -44,7 +44,9 @@ sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine
 
 ## Compiler Options
 -drg (toggles startDRG)
+
 -bu (backups)
+
 -lbu{id} (loads backup, exclude id to unload backup)
 
 ### development
