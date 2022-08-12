@@ -42,8 +42,10 @@ sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine
 7. Run for first time setup
 - Setup config.json
 
-## Compiler
-Adding "-drg" to the command temporarily toggles if drg will be launched.
+## Compiler Options
+-drg (toggles startDRG)
+-bu (backups)
+-lbu{id} (loads backup, exclude id to unload backup)
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
