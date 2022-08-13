@@ -38,15 +38,6 @@ const keypress = async () => {
     }))
 }
 
-function findModName() {
-    var name = ``;
-    fs.readdirSync(`${__dirname}/../Content`).forEach(x => {
-        if (ignoredDirs.includes(x)) return;
-        name = x;
-    });
-    return name;
-}
-
 (async () => {
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     var updateCompleted = false;
@@ -83,11 +74,6 @@ function findModName() {
     await update();
     const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
 
-    var ignoredDirs = [];
-    fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`, `utf8`).split(`\n`).forEach(x => {
-        ignoredDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``));
-    });
-
     const username = os.userInfo().username;
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
@@ -117,7 +103,7 @@ function findModName() {
 
     var config = {
         ProjectName: "FSD",
-        ModName: findModName(),
+        ModName: ``,
         ProjectFile: `/../FSD.uproject`,
         UnrealEngine: ``,
         SteamInstall: ``,
@@ -159,6 +145,24 @@ function findModName() {
     if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4`);
     if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg`);
 
+    if(!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log(`Couldnt find Config/DefaultGame.ini`);
+
+    var neverCookDirs = [];
+    fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`, `utf8`).split(`\n`).forEach(x =>
+        neverCookDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``))
+    );
+    
+    function findModName() {
+        var name = ``;
+        fs.readdirSync(`${__dirname}/../Content`).forEach(x => {
+            if (neverCookDirs.includes(x)) return;
+            name = x;
+        });
+        return name;
+    }
+
+    config.ModName = findModName();
+    
     writeConfig(config);
     function writeConfig(c) {
         fs.writeFileSync(configPath, beautify(JSON.stringify(c), { format: 'json' }));
