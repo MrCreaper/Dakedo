@@ -25,6 +25,7 @@
   - frozen screen areas
 - epic games shortcut dosent launch UE
   - so godda launch with the epic games launcher
+- crashes
 
 ## Getting wine (windows) ue4
 

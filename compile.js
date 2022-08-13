@@ -251,6 +251,8 @@ function formatTime(time) {
                     listFound = false;
                 }
             });
+            fs.writeFileSync(configFile,out);
+            console.log(`Added "${config.ModName} Latest" to never cook`);
         }
         if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
             console.log(`Backup already loaded, removing.`);
@@ -290,6 +292,9 @@ function formatTime(time) {
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
                 console.log(`Done!`);
+                
+                if (config.backupOnCompile)
+                    await backup();
 
                 if (config.startDRG) {
                     if (!config.dontKillDRG) {
@@ -318,9 +323,6 @@ function formatTime(time) {
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
-
-    if (config.backupOnCompile)
-        await backup();
     console.log(`cooking ${config.ModName}...`);
     fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
     var cookingChild = child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`)
