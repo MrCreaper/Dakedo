@@ -1,4 +1,18 @@
-# DRG Linux Modding
+# DRG Modding Compiler
+
+A compiler that runs on anything with some quality of life features
+
+## Compiler Options
+-drg (toggles startDRG)
+
+-bu (backups)
+
+-lbu{id} (loads backup, exclude id to unload backup)
+
+### development
+Build w/[pkg](https://www.npmjs.com/package/pkg)
+
+# Linux Wine UE4
 
 ## [Native](https://docs.unrealengine.com/4.27/en-US/SharingAndReleasing/Linux/BeginnerLinuxDeveloper/SettingUpAnUnrealWorkflow/) pros and cons
 ### pros
@@ -42,13 +56,3 @@ sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine
 - (optional) make a link to the compiler :)
 7. Run for first time setup
 - Setup config.json
-
-## Compiler Options
--drg (toggles startDRG)
-
--bu (backups)
-
--lbu{id} (loads backup, exclude id to unload backup)
-
-### development
-Build w/[pkg](https://www.npmjs.com/package/pkg)
