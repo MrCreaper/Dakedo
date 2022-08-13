@@ -22,6 +22,31 @@ function formatTime(time) {
     return t;
 }
 
+function isJsonString(str) {
+    try {
+        JSON.parse(str);
+    } catch (e) {
+        return false;
+    }
+    return true;
+}
+const keypress = async () => {
+    process.stdin.setRawMode(true)
+    return new Promise(r => process.stdin.once('data', () => {
+        process.stdin.setRawMode(false);
+        r();
+    }))
+}
+
+function findModName() {
+    var name = ``;
+    fs.readdirSync(`${__dirname}/../Content`).forEach(x => {
+        if (ignoredDirs.includes(x)) return;
+        name = x;
+    });
+    return name;
+}
+
 (async () => {
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     var updateCompleted = false;
@@ -63,21 +88,41 @@ function formatTime(time) {
         ignoredDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``));
     });
 
-    function findModName() {
-        var name = ``;
-        fs.readdirSync(`${__dirname}/../Content`).forEach(x => {
-            if (ignoredDirs.includes(x)) return;
-            name = x;
-        });
-        return name;
-    }
+    const username = os.userInfo().username;
+
+    const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
+
+    const platformPaths = {
+        win: {
+            UnrealEngine: ``,
+            SteamInstall: ``,
+            CookingCmd: ``,
+            PackingCmd: ``,
+        },
+        linux: {
+            UnrealEngine: `/home/${username}/Documents/UE_4.27`,
+            SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
+            CookingCmd: `${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
+            PackingCmd: `${config.UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
+        },
+        linuxwine: {
+            UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
+            SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
+            CookingCmd: `wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
+            PackingCmd: `wine "${config.UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
+        }
+    };
+
+    const paths = platformPaths[`${os.platform()}${wine ? `wine` : ``}`];
 
     var config = {
         ProjectName: "FSD",
         ModName: findModName(),
         ProjectFile: `/../FSD.uproject`,
-        UnrealEngineLocation: "/home/me/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27",
-        SteamInstall: "/home/me/.local/share/Steam/steamapps/common/Deep Rock Galactic",
+        UnrealEngine: ``,
+        SteamInstall: ``,
+        CookingCmd: ``,
+        PackingCmd: ``,
         logs: "./logs.txt", // empty for no logs
         startDRG: false,
         dontKillDRG: false,
@@ -86,21 +131,9 @@ function formatTime(time) {
         MaxBackups: -1,
     };
 
-    function isJsonString(str) {
-        try {
-            JSON.parse(str);
-        } catch (e) {
-            return false;
-        }
-        return true;
-    }
-    const keypress = async () => {
-        process.stdin.setRawMode(true)
-        return new Promise(r => process.stdin.once('data', () => {
-            process.stdin.setRawMode(false);
-            r();
-        }))
-    }
+    Object.keys(paths).forEach(key =>
+        config[key] = paths[key]
+    );
 
     const configPath = `${__dirname}/config.json`;
     const forceNew = false;
@@ -119,12 +152,17 @@ function formatTime(time) {
                 config[x] = tempconfig[x];
         });
     }
+
+    // config ready, verify
+    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
+    if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return console.log(`Couldnt find project file`);
+    if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4`);
+    if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg`);
+
     writeConfig(config);
     function writeConfig(c) {
         fs.writeFileSync(configPath, beautify(JSON.stringify(c), { format: 'json' }));
     }
-
-    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
 
     if (process.argv.includes(`-verify`)) return;
 
@@ -251,7 +289,7 @@ function formatTime(time) {
                     listFound = false;
                 }
             });
-            fs.writeFileSync(configFile,out);
+            fs.writeFileSync(configFile, out);
             console.log(`Added "${config.ModName} Latest" to never cook`);
         }
         if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
@@ -264,7 +302,7 @@ function formatTime(time) {
 
     // just becomes hidden, for some reason.. and then, bug reporter jumpscare for .1s
     //if (process.argv.includes(`-ue`))
-    //return child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
+    //return child.exec(`wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
 
     function pack() {
@@ -279,7 +317,7 @@ function formatTime(time) {
         fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
         fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-        child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`)
+        child.exec(config.PackingCmd)
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
@@ -292,7 +330,7 @@ function formatTime(time) {
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
                 console.log(`Done!`);
-                
+
                 if (config.backupOnCompile)
                     await backup();
 
@@ -325,7 +363,8 @@ function formatTime(time) {
     }
     console.log(`cooking ${config.ModName}...`);
     fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
-    var cookingChild = child.exec(`wine "${config.UnrealEngineLocation}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`)
+
+    var cookingChild = child.exec(config.CookingCmd)
         .on('exit', async () => {
             var d = fs.readFileSync(config.logs);
             if (d.includes(`LogInit: Display: Success - `))
