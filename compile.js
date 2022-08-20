@@ -128,7 +128,7 @@ function findModName() {
         }
     };
 
-    Object.keys(platformPaths).forEach(plat => 
+    Object.keys(platformPaths).forEach(plat =>
         Object.keys(platformPaths[plat]).forEach(x => platformPaths[plat][x] = platformPaths[plat][x].replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine))
     );
 
@@ -374,21 +374,21 @@ function findModName() {
     var cookingChild = child.exec(config.CookingCmd)
         .on('exit', async () => {
             var d = fs.readFileSync(config.logs);
-            if (d.includes(`LogInit: Display: Success - `))
-                if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
-                    console.log(`Cooked!`);
-                    pack();
-                } else if (!logsDisabled) {
-                    console.log(`Failed. Check the logs and fix your damn "code"`);
-                    await keypress();
-                    exitHandler();
-                } else {
+            if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
+                console.log(`Cooked!`);
+                pack();
+            } else if (d.includes(`LogInit: Display: Failure - `)) {
+                if (logsDisabled) {
                     console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                     fs.renameSync(config.logs, `${__dirname}/logs.txt`);
                     await keypress();
                     exitHandler();
+                    return;
                 }
-            else {
+                console.log(`Failed. Check the logs and fix your damn "code"`);
+                await keypress();
+                exitHandler();
+            } else {
                 console.log(`What the fuck did you do.`);
                 await keypress();
                 exitHandler();
