@@ -378,6 +378,10 @@ function findModName() {
                 console.log(`Cooked!`);
                 pack();
             } else if (d.includes(`LogInit: Display: Failure - `)) {
+                d.split(`\n`).forEach(x => {
+                    if (x.includes(`LogInit: Display: LogProperty: Error: `))
+                        console.log(x.replace(`LogInit: Display: LogProperty: Error: `, ``));
+                });
                 if (logsDisabled) {
                     console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                     fs.renameSync(config.logs, `${__dirname}/logs.txt`);
