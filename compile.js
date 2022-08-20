@@ -136,9 +136,10 @@ function findModName() {
 
     const paths = platformPaths[`${os.platform()}${wine ? `wine` : ``}`];
 
-    Object.keys(paths).forEach(key =>
-        config[key] = paths[key]
-    );
+    Object.keys(paths).forEach(key => {
+        if (!config[key])
+            config[key] = paths[key]
+    });
 
     const configPath = `${__dirname}/config.json`;
     const forceNew = false;
