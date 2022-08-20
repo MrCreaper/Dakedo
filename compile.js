@@ -107,26 +107,30 @@ function findModName() {
         MaxBackups: -1,
     };
 
-    const platformPaths = {
+    var platformPaths = {
         win: {
             UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
             SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
-            CookingCmd: `${this.UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-            PackingCmd: `${this.UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
+            CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
+            PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
         },
         linux: {
             UnrealEngine: `/home/${username}/Documents/UE_4.27`,
             SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-            CookingCmd: `${this.UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-            PackingCmd: `${this.UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
+            CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
+            PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
         },
         linuxwine: {
             UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
             SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-            CookingCmd: `wine "${this.UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
-            PackingCmd: `wine "${this.UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
+            CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
+            PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
         }
     };
+
+    Object.keys(platformPaths).forEach(plat => 
+        Object.keys(platformPaths[plat]).forEach(x => platformPaths[plat][x] = platformPaths[plat][x].replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine))
+    );
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
 
