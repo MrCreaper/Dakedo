@@ -1,5 +1,4 @@
-const fs = require(`fs`);
-const fse = require('fs-extra');
+const fs = require('fs-extra');
 const child = require(`child_process`);
 const beautify = require('beautify');
 const path = require('path');
@@ -38,17 +37,17 @@ const keypress = async () => {
     }))
 }
 
-var neverCookDirs = [];
-fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`, `utf8`).split(`\n`).forEach(x =>
-    neverCookDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``))
-);
-
 function findModName() {
+    var neverCookDirs = [];
+    if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return `No DefaultGame.ini found.`
+    fs.readFileSync(`${__dirname}/../Config/DefaultGame.ini`, `utf8`).split(`\n`).forEach(x =>
+        neverCookDirs.push(x.replace(`+DirectoriesToNeverCook=(Path="/Game/`, ``).replace(`")`, ``))
+    );
+
     if (!fs.existsSync(`${__dirname}/../Content`)) return `No name found.`
     var name = ``;
     fs.readdirSync(`${__dirname}/../Content`).forEach(x => {
-        if (neverCookDirs.includes(x)) return;
-        name = x;
+        if (!neverCookDirs.includes(x)) name = x;
     });
     return name;
 }
@@ -69,20 +68,17 @@ function findModName() {
                 if (!asset) return console.log(`No compatible update download found.. (${os.platform()})`);
                 console.log(`Downloading update...`);
                 //if (!fs.accessSync(__dirname)) return console.log(`No access to local dir`);
-                download(asset.browser_download_url);
-                function download(url) {
-                    https.get(url, down => {
-                        if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                        var file = fs.createWriteStream(`${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`);
-                        down.pipe(file
-                            .on(`finish`, () => {
-                                file.close();
-                                updateCompleted = true;
-                                console.log(`Update finished! ${version} => ${resp.tag_name}`);
-                                r();
-                            }))
-                    });
-                }
+                https.get(asset.browser_download_url, down => {
+                    if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
+                    var file = fs.createWriteStream(`${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`);
+                    down.pipe(file
+                        .on(`finish`, () => {
+                            file.close();
+                            updateCompleted = true;
+                            console.log(`Update finished! ${version} => ${resp.tag_name}`);
+                            r();
+                        }))
+                });
             }
         });
     }
@@ -95,6 +91,7 @@ function findModName() {
         ProjectName: "FSD",
         ModName: findModName(),
         ProjectFile: `/../FSD.uproject`,
+        DirsToNeverCook: [], // folder named after ModName is automaticlly included
         UnrealEngine: ``,
         SteamInstall: ``,
         CookingCmd: ``,
@@ -133,7 +130,6 @@ function findModName() {
     );
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-
     const paths = platformPaths[`${os.platform()}${wine ? `wine` : ``}`];
 
     Object.keys(paths).forEach(key => {
@@ -176,6 +172,10 @@ function findModName() {
 
     if (process.argv.includes(`-drg`))
         config.startDRG = !config.startDRG;
+
+    const tempModName = process.argv.find(x => !x.includes(`/`) || !x.includes(`-`))
+    if (tempModName)
+        config.ModName = tempModName;
 
     var logsDisabled = false;
     if (!config.logs) {
@@ -256,7 +256,7 @@ function findModName() {
             id++;
             var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
             fs.mkdirSync(buf);
-            fse.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
+            fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
             console.log(`Backup done! id: ${id}`);
             r();
         })
@@ -264,6 +264,23 @@ function findModName() {
 
     if (process.argv.find(x => x.includes(`-lbu`)))
         return loadbackup(process.argv.find(x => x.includes(`-lbu`)).replace(`-lbu`, ``));
+
+    function refreshDirsToNeverCook(whitelist = []) {
+        whitelist.concat(config.DirsToNeverCook)
+        var configFile = `${__dirname}/../Config/DefaultGame.ini`;
+        var read = fs.readFileSync(configFile, `utf8`).split(`\n`);
+
+        var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
+        read.forEach((x, i) => {
+            if (x.includes(`+DirectoriesToNeverCook=`))
+                read.splice(read.findIndex(y => y == x), 1);
+        })
+        fs.readdirSync(`${__dirname}/../Content/`).forEach(x => {
+            if (!whitelist.includes(x))
+                read.splice(dirsIndex, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
+        });
+        fs.writeFileSync(configFile, read.join(`\n`));
+    }
 
     function loadbackup(id) {
         if (!id) {
@@ -283,29 +300,13 @@ function findModName() {
         if (!backuppath) return console.log(`Invalid backup id!`);
         var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
         console.log(`Loading backup ${folder.split(` - `)[0]} from${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
-        var configFile = `${__dirname}/../Config/DefaultGame.ini`;
-        var read = fs.readFileSync(configFile);
-        if (!read.includes(`\n+DirectoriesToNeverCook=(Path="/Game/${config.ModName} Latest`)) { // add to never cook
-            var out = ``;
-            var listFound = false;
-            read.split(`\n`).forEach(x => {
-                out += `${x}\n`;
-                if (x.includes(`+DirectoriesToNeverCook=(Path=`)) {
-                    if (!listFound) listFound = true;
-                } else if (listFound) {
-                    out += `\n+DirectoriesToNeverCook=(Path="/Game/${config.ModName} Latest")`;
-                    listFound = false;
-                }
-            });
-            fs.writeFileSync(configFile, out);
-            console.log(`Added "${config.ModName} Latest" to never cook`);
-        }
         if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
             console.log(`Backup already loaded, removing.`);
             fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
         }
         fs.renameSync(`${__dirname}/../Content/${config.ModName}`, `${__dirname}/../Content/${config.ModName} Latest`);
-        fse.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
+        fs.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
+        refreshDirsToNeverCook([config.ModName]);
     }
 
     // just becomes hidden, for some reason.. and then, bug reporter jumpscare for .1s
@@ -322,8 +323,8 @@ function findModName() {
         else
             fs.mkdirSync(`${__dirname}/temp/`);
         fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
-        fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
-        fse.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
+        fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
+        fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
         child.exec(config.PackingCmd)
             .on('exit', async () => {
@@ -370,18 +371,19 @@ function findModName() {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
     console.log(`cooking ${config.ModName}...`);
+    refreshDirsToNeverCook([config.ModName]);
     fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
 
     var cookingChild = child.exec(config.CookingCmd)
         .on('exit', async () => {
-            var d = fs.readFileSync(config.logs);
+            var d = fs.readFileSync(config.logs, `utf8`);
             if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
                 console.log(`Cooked!`);
                 pack();
             } else if (d.includes(`LogInit: Display: Failure - `)) {
                 d.split(`\n`).forEach(x => {
                     if (x.includes(`LogInit: Display: LogProperty: Error: `))
-                        console.log(x.replace(`LogInit: Display: LogProperty: Error: `, ``));
+                        console.log(x.replace(`LogInit: Display: LogProperty: Error: `, ``).replace(`FStructProperty::Serialize Loading: Property `, ``).replace(`StructProperty `, ``).replace(/\/Game/g, ``).replace(/'/g, ``).replace(/_C:/g, ` `).split(`[  0]`)[1]);
                 });
                 if (logsDisabled) {
                     console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
