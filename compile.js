@@ -182,9 +182,10 @@ function findModName() {
     if (process.argv.includes(`-drg`))
         config.startDRG = !config.startDRG;
 
-    const tempModName = process.argv.find(x => !x.includes(`/`) || !x.includes(`-`))
+    const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`));
     if (tempModName)
         config.ModName = tempModName;
+    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
 
     var logsDisabled = false;
     if (!config.logs) {
