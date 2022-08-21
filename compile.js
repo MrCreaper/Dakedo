@@ -61,24 +61,27 @@ function findModName() {
         return new Promise(async r => {
             var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
             resp = await resp.json();
-            if (resp.tag_name.toLocaleLowerCase().replace(/v/g,``) == version && !resp.draft && !resp.prerelease)
+            if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease)
                 r();
             else {
                 const asset = resp.assets.find(x => x.name.includes(os.platform()));
                 if (!asset) return console.log(`No compatible update download found.. (${os.platform()})`);
                 console.log(`Downloading update...`);
                 //if (!fs.accessSync(__dirname)) return console.log(`No access to local dir`);
-                https.get(asset.browser_download_url, down => {
-                    if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                    var file = fs.createWriteStream(`${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`);
-                    down.pipe(file
-                        .on(`finish`, () => {
-                            file.close();
-                            updateCompleted = true;
-                            console.log(`Update finished! ${version} => ${resp.tag_name.replace(/v/g,``)}`);
-                            r();
-                        }))
-                });
+                download(asset.browser_download_url,)
+                function download(url) {
+                    https.get(url, down => {
+                        if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
+                        var file = fs.createWriteStream(`${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`);
+                        down.pipe(file
+                            .on(`finish`, () => {
+                                file.close();
+                                updateCompleted = true;
+                                console.log(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
+                                r();
+                            }))
+                    });
+                }
             }
         });
     }
@@ -122,7 +125,13 @@ function findModName() {
             SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
             CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
             PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
-        }
+        },
+        macos: {
+            UnrealEngine: `no idea`,
+            SteamInstall: `no idea`,
+            CookingCmd: `no idea`,
+            PackingCmd: `no idea`,
+        },
     };
 
     Object.keys(platformPaths).forEach(plat =>
