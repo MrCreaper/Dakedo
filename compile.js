@@ -61,7 +61,7 @@ function findModName() {
         return new Promise(async r => {
             var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
             resp = await resp.json();
-            if (resp.tag_name == version && !resp.draft && !resp.prerelease)
+            if (resp.tag_name.toLocaleLowerCase().replace(/v/g,``) == version && !resp.draft && !resp.prerelease)
                 r();
             else {
                 const asset = resp.assets.find(x => x.name.includes(os.platform()));
@@ -75,7 +75,7 @@ function findModName() {
                         .on(`finish`, () => {
                             file.close();
                             updateCompleted = true;
-                            console.log(`Update finished! ${version} => ${resp.tag_name}`);
+                            console.log(`Update finished! ${version} => ${resp.tag_name.replace(/v/g,``)}`);
                             r();
                         }))
                 });
