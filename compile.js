@@ -398,11 +398,11 @@ function findModName() {
                 pack();
             } else if (d.includes(`LogInit: Display: Failure - `)) {
                 var errsFound = false;
+                var errs = 0;
+                var errorsLogs = ``;
                 d.split(`\n`).forEach(x => {
                     if (x.includes(`LogInit: Display: LogProperty: Error: `)) {
-                        if (!errsFound)
-                            console.log(`Errors:\n`);
-                        errsFound = true;
+                        errs++;
                         var log = x
                             .split(`[  0]`)[1] // after timestamp
                             .replace(/LogInit: Display: LogProperty: Error: /g, ``)
@@ -422,9 +422,10 @@ function findModName() {
                         while (log.split(` `).find(x => x.includes(`.`))) {
                             log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
                         }
-                        console.log(log);
+                        errorsLogs += `${log}\n`;
                     }
                 });
+                console.log(`Errors ${errs}:\n\n${errorsLogs}`);
                 if (logsDisabled) {
                     console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                     fs.renameSync(config.logs, `${__dirname}/logs.txt`);
