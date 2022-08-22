@@ -64,6 +64,7 @@ function findModName() {
             if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease)
                 r();
             else {
+                if (!process.pkg) return console.log(`Not downloading update for .js version`);
                 const asset = resp.assets.find(x => x.name.includes(os.platform()));
                 if (!asset) return console.log(`No compatible update download found.. (${os.platform()})`);
                 console.log(`Downloading update...`);
@@ -72,10 +73,12 @@ function findModName() {
                 function download(url) {
                     https.get(url, down => {
                         if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                        var file = fs.createWriteStream(`${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`);
+                        var filePath = `${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`;
+                        var file = fs.createWriteStream(filePath);
                         down.pipe(file
                             .on(`finish`, () => {
                                 file.close();
+                                fs.chmodSync(filePath, 0777)
                                 updateCompleted = true;
                                 console.log(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
                                 r();
@@ -223,7 +226,7 @@ function findModName() {
             maxConfigKeyLenght = x.length;
     });
     Object.keys(config).forEach(x =>
-        fs.appendFileSync(config.logs, `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${config[x]}\n`)
+        fs.appendFileSync(config.logs, `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}\n`)
     );
     //fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
 
@@ -333,6 +336,7 @@ function findModName() {
         else
             fs.mkdirSync(`${__dirname}/temp/`);
         fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
+        if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return console.log(`Cooking fucked up.`);
         fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
         fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
@@ -382,7 +386,7 @@ function findModName() {
     }
     console.log(`cooking ${config.ModName}...`);
     refreshDirsToNeverCook([config.ModName]);
-    fs.appendFileSync(config.logs, `cooking ${config.ModName}...\n`);
+    fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n\n`);
 
     var cookingChild = child.exec(config.CookingCmd)
         .on('exit', async () => {

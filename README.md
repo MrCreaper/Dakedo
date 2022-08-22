@@ -9,6 +9,8 @@ A compiler that runs on anything with some quality of life features
 
 -lbu{id} (loads backup, exclude id to unload backup)
 
+{mod name} (just adding a mod name will set it as the ModName for the compile)
+
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
 
