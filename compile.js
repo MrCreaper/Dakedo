@@ -64,7 +64,10 @@ function findModName() {
             if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease)
                 r();
             else {
-                if (!process.pkg) return console.log(`Not downloading update for .js version`);
+                if (!process.pkg) {
+                    r();
+                    return console.log(`Not downloading update for .js version`);
+                }
                 const asset = resp.assets.find(x => x.name.includes(os.platform()));
                 if (!asset) return console.log(`No compatible update download found.. (${os.platform()})`);
                 console.log(`Downloading update...`);
@@ -219,16 +222,15 @@ function findModName() {
 
     fs.writeFileSync(config.logs, ``);
 
-    console.log(config);
     var maxConfigKeyLenght = 0;
     Object.keys(config).forEach(x => {
         if (x.length > maxConfigKeyLenght)
             maxConfigKeyLenght = x.length;
     });
     Object.keys(config).forEach(x =>
-        fs.appendFileSync(config.logs, `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}\n`)
+        console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`)
     );
-    //fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
+    fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
 
     if (process.argv.includes(`-bu`))
         return backup();
@@ -384,7 +386,7 @@ function findModName() {
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
-    console.log(`cooking ${config.ModName}...`);
+    console.log(`\ncooking ${config.ModName}...`);
     refreshDirsToNeverCook([config.ModName]);
     fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n\n`);
 
@@ -395,9 +397,33 @@ function findModName() {
                 console.log(`Cooked!`);
                 pack();
             } else if (d.includes(`LogInit: Display: Failure - `)) {
+                var errsFound = false;
                 d.split(`\n`).forEach(x => {
-                    if (x.includes(`LogInit: Display: LogProperty: Error: `))
-                        console.log(x.replace(`LogInit: Display: LogProperty: Error: `, ``).replace(`FStructProperty::Serialize Loading: Property `, ``).replace(`StructProperty `, ``).replace(/\/Game/g, ``).replace(/'/g, ``).replace(/_C:/g, ` `).split(`[  0]`)[1]);
+                    if (x.includes(`LogInit: Display: LogProperty: Error: `)) {
+                        if (!errsFound)
+                            console.log(`Errors:\n`);
+                        errsFound = true;
+                        var log = x
+                            .split(`[  0]`)[1] // after timestamp
+                            .replace(/LogInit: Display: LogProperty: Error: /g, ``)
+                            .replace(/FStructProperty::Serialize Loading: Property /g, ``)
+                            .replace(/StructProperty /g, ``)
+                            .replace(/\/Game/g, ``) // file path start
+                            .replace(/_C:/g, ` > `) // after file
+                            .replace(/:CallFunc_/g, ` > (function) `)
+                            .replace(/ExecuteUbergraph_/g, ` > (graph) `)
+                            .replace(/>  >/g, `>`)
+                            .replace(/:/g, ` > `)
+                            .replace(/'/g, ``)
+                            .replace(/_/g, ` `)
+                            .replace(`. `, ` | ERR: `);
+                        log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
+                        //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
+                        while (log.split(` `).find(x => x.includes(`.`))) {
+                            log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+                        }
+                        console.log(log);
+                    }
                 });
                 if (logsDisabled) {
                     console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
@@ -406,7 +432,7 @@ function findModName() {
                     exitHandler();
                     return;
                 }
-                console.log(`Failed. Check the logs and fix your damn "code"`);
+                console.log(`${errsFound ? `\n` : ``}Failed. Check the logs${errsFound ? ` (or check the above)` : ``} and fix your damn "code"`);
                 await keypress();
                 exitHandler();
             } else {
