@@ -1,10 +1,10 @@
 const fs = require('fs-extra');
 const child = require(`child_process`);
-const beautify = require('beautify');
 const path = require('path');
 const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
+const { platform, exit } = require('process');
 
 function formatTime(time) {
     var weeks = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7)));
@@ -53,6 +53,11 @@ function findModName() {
 }
 
 (async () => {
+    if (process.getuid() == 0) {
+        console.log(`Refusing to run as root`);
+        await keypress();
+        return exitHandler();
+    }
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     var updateCompleted = false;
     async function update() {
@@ -97,7 +102,7 @@ function findModName() {
     const username = os.userInfo().username;
 
     var config = {
-        ProjectName: "FSD",
+        ProjectName: "FSD", // kinda useless
         ModName: findModName(),
         ProjectFile: `/../FSD.uproject`,
         DirsToNeverCook: [], // folder named after ModName is automaticlly included
@@ -180,7 +185,7 @@ function findModName() {
 
     writeConfig(config);
     function writeConfig(c) {
-        fs.writeFileSync(configPath, beautify(JSON.stringify(c), { format: 'json' }));
+        fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
     }
 
     if (process.argv.includes(`-verify`)) return;
@@ -230,7 +235,7 @@ function findModName() {
     Object.keys(config).forEach(x =>
         console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`)
     );
-    fs.appendFileSync(config.logs, `${beautify(JSON.stringify(config), { format: 'json' })}\n`);
+    fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`))
         return backup();
@@ -372,20 +377,59 @@ function findModName() {
                         child.exec(`steam steam://rungameid/548430`)
                             .on(`exit`, () => {
                                 console.log(`Lauched DRG`); // most likely
-                                exitHandler();
                                 r();
                             })
+                            .on(`message`, (d) => fs.appendFileSync(config.logs, String(d)))
                             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
                     )
-                } else
-                    if (!config.leaveWhenDone) {
-                        console.log("Press enter to get out!");
-                        await keypress();
-                        exitHandler();
-                    } else exitHandler();
+                }
+
+                // clear swap, can couse crashes couse it just piles up after compiles for some reason?
+                if (config.ClearSwap || os.freemem() / os.totalmem() > .7) {
+                    console.log(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
+                    await new Promise(r =>
+                        child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
+                            console.log(`Swap cleared.`);
+                            r();
+                        }));
+                }
+
+                if (!config.leaveWhenDone) {
+                    console.log("Press enter to get out!");
+                    await keypress();
+                    exitHandler();
+                } else exitHandler();
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
+
+    function hasaccess(dir) {
+        return new Promise(r => {
+            try {
+                fs.accessSync(dir, fs.constants.W_OK, fs.constants.R_OK);
+                r(true);
+            } catch (error) {
+                r(false);
+            }
+        })
+    }
+
+    if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !hasaccess(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
+        console.log(`\nNo access to /Saved/Cooked/WindowsNoEditor`);
+        if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${__dirname}/../Saved/Cooked/WindowsNoEditor`);
+        //await keypress();
+        //return exitHandler();
+        //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
+    }
+
+    if (fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !hasaccess(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
+        console.log(`\nNo access to ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
+        if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
+        //await keypress();
+        //return exitHandler();
+        //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
+    }
+
     console.log(`\ncooking ${config.ModName}...`);
     refreshDirsToNeverCook([config.ModName]);
     fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n\n`);
