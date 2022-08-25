@@ -61,8 +61,9 @@ function findModName() {
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     var updateCompleted = false;
     async function update() {
-        const version = require(`./package.json`).version;
         const repo = `MrCreaper/drg-linux-modding`;
+        if (!repo) return;
+        const version = require(`./package.json`).version;
         return new Promise(async r => {
             var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
             resp = await resp.json();
@@ -89,7 +90,11 @@ function findModName() {
                                 fs.chmodSync(filePath, 0777)
                                 updateCompleted = true;
                                 console.log(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
-                                r();
+                                child.spawn(process.argv[0], process.argv.slice(1), {
+                                    stdio: 'inherit',
+                                });
+                                //process.exit(); // will make the child proccss "unkillable"
+                                //r(); // wait forever
                             }))
                     });
                 }
