@@ -4,20 +4,24 @@ const path = require('path');
 const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
-const { platform, exit } = require('process');
+const { platform } = require('process');
 
 function formatTime(time) {
+    var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
+    var months = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7 * 31)));
     var weeks = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7)));
     var days = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24)));
-    var hours = Math.abs(Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+    var hours = Math.abs(Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))) - 3; // fuck if I know why it needs -3h
     var minutes = Math.abs(Math.floor((time % (1000 * 60 * 60)) / (1000 * 60)));
     var seconds = Math.abs(Math.floor((time % (1000 * 60)) / 1000));
-    var t = "";
-    if (weeks) t += ` ${weeks}w`
-    if (days) t += ` ${days}d`
-    if (hours) t += ` ${hours}h`
-    if (minutes) t += ` ${minutes}min`
-    if (seconds) t += ` ${seconds}s`
+    var t = ``;
+    if (years) t += `${years}y`;
+    if (months) t += `${years ? ` ` : ``}${months}m`;
+    if (weeks) t += `${months ? ` ` : ``}${weeks}w`;
+    if (days) t += `${weeks ? ` ` : ``}${days}d`;
+    if (hours) t += `${days ? ` ` : ``}${hours}h`;
+    if (minutes) t += `${hours ? ` ` : ``}${minutes}min`;
+    if (seconds) t += `${minutes ? ` ` : ``}${seconds}s`;
     return t;
 }
 
@@ -240,6 +244,7 @@ function findModName() {
     Object.keys(config).forEach(x =>
         console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`)
     );
+    console.log();
     fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`))
@@ -287,6 +292,27 @@ function findModName() {
         })
     }
 
+    if (process.argv.find(x => x.includes(`-listbu`))) { // list backups
+        var backuppath = fs.readdirSync(`${__dirname}/backups`)
+        if (!backuppath) return console.log(`Invalid backup id!`);
+        backuppath.sort((a, b) => {
+        });
+        backuppath.sort(function (a, b) {
+            var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
+            var b = new Date(new Date().toUTCString()) - new Date(b.split(` - `)[1])
+            if (a < b) return 1;
+            if (a > b) return -1;
+            return 0;
+        });
+        backuppath.forEach(x => {
+            console.log(`${x.split(` - `)[0]} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1]))}`);
+        });
+        console.log(`\nBackups: ${backuppath.length}`);
+        await keypress();
+        exitHandler()
+        return;
+    }
+
     if (process.argv.find(x => x.includes(`-lbu`)))
         return loadbackup(process.argv.find(x => x.includes(`-lbu`)).replace(`-lbu`, ``));
 
@@ -320,11 +346,11 @@ function findModName() {
                 return;
             }
         }
-        if (!isNaN(id) && !Number.isInteger(parseInt(id))) return console.log(`Invalid id. ${id}`);
+        if (!isNaN(id) && !Number.isInteger(parseInt(id))) return console.log(`Invalid id. ${id}`); // custom ids would be nice
         var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
         if (!backuppath) return console.log(`Invalid backup id!`);
         var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
-        console.log(`Loading backup ${folder.split(` - `)[0]} from${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
+        console.log(`Loading backup ${folder.split(` - `)[0]} from ${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
         if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
             console.log(`Backup already loaded, removing.`);
             fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
@@ -364,7 +390,7 @@ function findModName() {
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
-                console.log(`Done!`);
+                console.log(`Packed!`);
 
                 if (config.backupOnCompile)
                     await backup();
@@ -390,7 +416,7 @@ function findModName() {
                 }
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
-                if (config.ClearSwap || os.freemem() / os.totalmem() > .7) {
+                if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
                     console.log(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
                     await new Promise(r =>
                         child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
@@ -399,6 +425,7 @@ function findModName() {
                         }));
                 }
 
+                console.log(`Done!`);
                 if (!config.leaveWhenDone) {
                     console.log("Press enter to get out!");
                     await keypress();
@@ -408,18 +435,7 @@ function findModName() {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
-    function hasaccess(dir) {
-        return new Promise(r => {
-            try {
-                fs.accessSync(dir, fs.constants.W_OK, fs.constants.R_OK);
-                r(true);
-            } catch (error) {
-                r(false);
-            }
-        })
-    }
-
-    if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !hasaccess(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
+    if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
         console.log(`\nNo access to /Saved/Cooked/WindowsNoEditor`);
         if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${__dirname}/../Saved/Cooked/WindowsNoEditor`);
         //await keypress();
@@ -427,7 +443,7 @@ function findModName() {
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }
 
-    if (fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !hasaccess(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
+    if (fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !fs.accessSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
         console.log(`\nNo access to ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
         if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
         //await keypress();
@@ -450,28 +466,32 @@ function findModName() {
                 var errs = 0;
                 var errorsLogs = ``;
                 d.split(`\n`).forEach(x => {
-                    if (x.includes(`LogInit: Display: LogProperty: Error: `)) {
+                    if (x.includes(`LogInit: Display: ` && x.includes(` Error: `))) {
                         errs++;
-                        var log = x
-                            .split(`[  0]`)[1] // after timestamp
-                            .replace(/LogInit: Display: LogProperty: Error: /g, ``)
-                            .replace(/FStructProperty::Serialize Loading: Property /g, ``)
-                            .replace(/StructProperty /g, ``)
-                            .replace(/\/Game/g, ``) // file path start
-                            .replace(/_C:/g, ` > `) // after file
-                            .replace(/:CallFunc_/g, ` > (function) `)
-                            .replace(/ExecuteUbergraph_/g, ` > (graph) `)
-                            .replace(/>  >/g, `>`)
-                            .replace(/:/g, ` > `)
-                            .replace(/'/g, ``)
-                            .replace(/_/g, ` `)
-                            .replace(`. `, ` | ERR: `);
-                        log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
-                        //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
-                        while (log.split(` `).find(x => x.includes(`.`))) {
-                            log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+                        try {
+                            var log = x
+                                .split(`[  0]`)[1] // after timestamp
+                                .replace(/LogInit: Display: LogProperty: Error: /g, ``)
+                                .replace(/FStructProperty::Serialize Loading: Property /g, ``)
+                                .replace(/StructProperty /g, ``)
+                                .replace(/\/Game/g, ``) // file path start
+                                .replace(/_C:/g, ` > `) // after file
+                                .replace(/:CallFunc_/g, ` > (function) `)
+                                .replace(/ExecuteUbergraph_/g, ` > (graph) `)
+                                .replace(/>  >/g, `>`)
+                                .replace(/:/g, ` > `)
+                                .replace(/'/g, ``)
+                                .replace(/_/g, ` `)
+                                .replace(`. `, ` | ERR: `);
+                            log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
+                            //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
+                            while (log.split(` `).find(x => x.includes(`.`))) {
+                                log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+                            }
+                            errorsLogs += `${log}\n`;
+                        } catch (error) {
+                            errorsLogs += `${x}\n`;
                         }
-                        errorsLogs += `${log}\n`;
                     }
                 });
                 console.log(`Errors ${errs}:\n\n${errorsLogs}`);

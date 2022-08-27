@@ -1,15 +1,13 @@
 # DRG Modding Compiler
-
 A compiler that runs on anything with some quality of life features
 
 ## Compiler Options
--drg (toggles startDRG)
-
--bu (backups)
-
--lbu{id} (loads backup, exclude id to unload backup)
-
-{mod name} (just adding a mod name will set it as the ModName for the compile)
+- {mod name} (just adding a mod name will set it as the ModName for the compile)
+- drg (toggles startDRG)
+- bu (backups)
+- lbu{id} (loads backup, exclude id to unload backup)
+- listbu (list backups)
+- No "clear backups" command, you clear that on your own. Your tears.
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
