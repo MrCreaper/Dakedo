@@ -37,6 +37,8 @@ Build w/[pkg](https://www.npmjs.com/package/pkg)
 - some graphical glitches
   - "compiling shaders" just randomlly appearing in random spots
   - frozen screen areas
+  - the node menu right click can glitch and not understand wether you want the menu or to move
+    - fix by alt+f2 "r"
 - epic games shortcut dosent launch UE
   - so godda launch with the epic games launcher
 - crashes

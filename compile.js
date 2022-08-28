@@ -5,6 +5,7 @@ const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
 const { platform } = require('process');
+const chalk = require(`chalk`);
 
 function formatTime(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
@@ -32,6 +33,19 @@ function isJsonString(str) {
         return false;
     }
     return true;
+}
+function searchDir(p = ``, search = []) {
+    var hits = [];
+    queryDir(p);
+    function queryDir(path) {
+        fs.readdirSync(path).forEach(x => {
+            var fp = `${path}/${x}`
+            var s = fs.statSync(fp);
+            if (s.isDirectory()) queryDir(fp);
+            if (s.isFile() && search.includes(x)) hits.push(fp);
+        });
+    }
+    return hits;
 }
 const keypress = async () => {
     process.stdin.setRawMode(true)
@@ -125,6 +139,8 @@ function findModName() {
         leaveWhenDone: true,
         backupOnCompile: true,
         MaxBackups: -1,
+        backupPak: false,
+        backupBlacklist: [`.git`],
     };
 
     var platformPaths = {
@@ -241,9 +257,31 @@ function findModName() {
         if (x.length > maxConfigKeyLenght)
             maxConfigKeyLenght = x.length;
     });
-    Object.keys(config).forEach(x =>
-        console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`)
-    );
+    Object.keys(config).forEach(x => {
+        if (!chalk) return console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`);
+        var coloredVal = ``;
+        switch (typeof config[x]) {
+            case `object`:
+                coloredVal = chalk.cyan(JSON.stringify(config[x]));
+                break;
+            case `boolean`:
+                if (config[x])
+                    coloredVal = chalk.green(config[x]);
+                else
+                    coloredVal = chalk.red(config[x]);
+                break;
+            case `number`:
+                coloredVal = chalk.greenBright(config[x]);
+                break;
+            case `string`:
+                coloredVal = chalk.redBright(config[x]);
+                break;
+            case `undefined`:
+                coloredVal = chalk.blue(config[x]);
+                break;
+        }
+        console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${coloredVal}`);
+    });
     console.log();
     fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
 
@@ -287,6 +325,9 @@ function findModName() {
             var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
             fs.mkdirSync(buf);
             fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
+            if (config.backupPak)
+                fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
+            if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.removeSync(x));
             console.log(`Backup done! id: ${id}`);
             r();
         })
@@ -386,7 +427,6 @@ function findModName() {
                     await keypress();
                     exitHandler();
                 }
-                // godda kill before adding
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
@@ -396,14 +436,6 @@ function findModName() {
                     await backup();
 
                 if (config.startDRG) {
-                    if (!config.dontKillDRG) {
-                        var prcList = await find('name', 'FSD');
-                        //console.log(prcList);
-                        prcList.forEach(x => {
-                            if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
-                                process.kill(x.pid);
-                        })
-                    }
                     await new Promise(r =>
                         child.exec(`steam steam://rungameid/548430`)
                             .on(`exit`, () => {
@@ -435,7 +467,8 @@ function findModName() {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
-    if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
+    // idk fs.access just false all the time.
+    /*if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
         console.log(`\nNo access to /Saved/Cooked/WindowsNoEditor`);
         if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${__dirname}/../Saved/Cooked/WindowsNoEditor`);
         //await keypress();
@@ -449,9 +482,20 @@ function findModName() {
         //await keypress();
         //return exitHandler();
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
+    }*/
+
+    if (config.startDRG && !config.dontKillDRG) { // kill drg and before cooking to save ram
+        var prcList = await find('name', 'FSD');
+        //console.log(prcList);
+        prcList.forEach(x => {
+            try {
+                if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
+                    process.kill(x.pid);
+            } catch (error) { }
+        })
     }
 
-    console.log(`\ncooking ${config.ModName}...`);
+    console.log(`cooking ${config.ModName}...`);
     refreshDirsToNeverCook([config.ModName]);
     fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n\n`);
 
@@ -466,32 +510,37 @@ function findModName() {
                 var errs = 0;
                 var errorsLogs = ``;
                 d.split(`\n`).forEach(x => {
-                    if (x.includes(`LogInit: Display: ` && x.includes(` Error: `))) {
-                        errs++;
-                        try {
-                            var log = x
-                                .split(`[  0]`)[1] // after timestamp
-                                .replace(/LogInit: Display: LogProperty: Error: /g, ``)
-                                .replace(/FStructProperty::Serialize Loading: Property /g, ``)
-                                .replace(/StructProperty /g, ``)
-                                .replace(/\/Game/g, ``) // file path start
-                                .replace(/_C:/g, ` > `) // after file
-                                .replace(/:CallFunc_/g, ` > (function) `)
-                                .replace(/ExecuteUbergraph_/g, ` > (graph) `)
-                                .replace(/>  >/g, `>`)
-                                .replace(/:/g, ` > `)
-                                .replace(/'/g, ``)
-                                .replace(/_/g, ` `)
-                                .replace(`. `, ` | ERR: `);
-                            log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
-                            //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
-                            while (log.split(` `).find(x => x.includes(`.`))) {
-                                log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
-                            }
-                            errorsLogs += `${log}\n`;
-                        } catch (error) {
-                            errorsLogs += `${x}\n`;
+                    if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
+                    errs++;
+                    try {
+                        var log = x
+                            .split(`[  0]`)[1] // after timestamp
+                            .replace(/LogInit: Display: /g, ``)
+                            .replace(/ Error: /g, ``)
+                            //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
+                            .replace(/FStructProperty::Serialize Loading: Property /g, ``)
+                            .replace(/StructProperty /g, ``)
+                            .replace(/\/Game/g, ``) // file path start
+                            .replace(/_C:/g, ` > `) // after file
+                            .replace(/:CallFunc_/g, ` > (function) `)
+                            .replace(/ExecuteUbergraph_/g, ` > (graph) `)
+                            .replace(/[AssetLog]/g, ``)
+                            .replace(/\\/g, `/`)
+                            .replace(/>  >/g, `>`)
+                            .replace(/:/g, ` > `)
+                            .replace(/'/g, ``)
+                            .replace(/_/g, ` `)
+                            .replace(`. `, ` | ERR: `);
+                        log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
+                        //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
+                        while (log.split(` `).find(x => x.includes(`.`))) {
+                            log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
                         }
+                        errorsLogs += `${log}\n`;
+                    } catch (err) {
+                        console.log(`BEAUTY ERROR: ${x}`);
+                        console.log(err);
+                        errorsLogs += `${x}\n`;
                     }
                 });
                 console.log(`Errors ${errs}:\n\n${errorsLogs}`);
