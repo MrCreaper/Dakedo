@@ -328,7 +328,7 @@ function findModName() {
             if (config.backupPak)
                 fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
             if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.removeSync(x));
-            console.log(`Backup done! id: ${id}`);
+            console.log(`Backup done! id: ${chalk.cyan(id)}`);
             r();
         })
     }
@@ -436,7 +436,8 @@ function findModName() {
                     await backup();
 
                 if (config.startDRG) {
-                    await new Promise(r =>
+                    await new Promise(r => {
+                        console.log(`Launching DRG...`);
                         child.exec(`steam steam://rungameid/548430`)
                             .on(`exit`, () => {
                                 console.log(`Lauched DRG`); // most likely
@@ -444,18 +445,18 @@ function findModName() {
                             })
                             .on(`message`, (d) => fs.appendFileSync(config.logs, String(d)))
                             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
-                    )
+                    })
                 }
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
-                if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
+                /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
                     console.log(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
                     await new Promise(r =>
                         child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
                             console.log(`Swap cleared.`);
                             r();
                         }));
-                }
+                }*/
 
                 console.log(`Done!`);
                 if (!config.leaveWhenDone) {
@@ -524,7 +525,7 @@ function findModName() {
                             .replace(/_C:/g, ` > `) // after file
                             .replace(/:CallFunc_/g, ` > (function) `)
                             .replace(/ExecuteUbergraph_/g, ` > (graph) `)
-                            .replace(/[AssetLog]/g, ``)
+                            .replace(/\[AssetLog\]/g, ``)
                             .replace(/\\/g, `/`)
                             .replace(/>  >/g, `>`)
                             .replace(/:/g, ` > `)
