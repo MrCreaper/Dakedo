@@ -172,6 +172,13 @@ function findModName() {
             PackingCmd: `no idea`,
             UnPackingCmd: `no idea`,
         },
+        givenUpos: {
+            UnrealEngine: `no idea`,
+            SteamInstall: `no idea`,
+            CookingCmd: `no idea`,
+            PackingCmd: `no idea`,
+            UnPackingCmd: `no idea`,
+        },
     };
 
     Object.keys(platformPaths).forEach(plat =>
@@ -185,7 +192,8 @@ function findModName() {
     );
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-    const paths = platformPaths[`${os.platform()}${wine ? `wine` : ``}`];
+    var paths = platformPaths[`${os.platform().replace(`32`,``).replace(`Darwin`,`macos`)}${wine ? `wine` : ``}`];
+    if(!paths) paths = platformPaths.givenUpos;
 
     Object.keys(paths).forEach(key => {
         if (!config[key])
@@ -263,6 +271,8 @@ function findModName() {
     // unpack from argument
     var unpackFile = process.argv.find(x => x.includes(`.pak`));
     if (unpackFile) return unpack(unpackFile);
+
+    if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
 
     fs.writeFileSync(config.logs, ``);
 

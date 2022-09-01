@@ -2,12 +2,15 @@
 A compiler that runs on anything with some quality of life features
 
 ## Compiler Options
+Options require a "-" infront of them (exmaple: `./compile -drg` will toggle drg config)
+- verify (verifies settings, prob)
 - {mod name} (just adding a mod name will set it as the ModName for the compile)
 - drg (toggles startDRG)
 - bu (backups)
 - lbu{id} (loads backup, exclude id to unload backup)
 - listbu (list backups)
 - {pak file} (adding path to the execution will decompile the pak or if you are using the release you can just drag the file on it)
+- unpackdrg (unpacks drg)
 
 No "clear backups" command, you clear that on your own. Your tears.
 
