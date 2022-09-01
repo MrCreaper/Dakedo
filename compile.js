@@ -178,7 +178,7 @@ function findModName() {
         Object.keys(platformPaths[plat]).forEach(x =>
             platformPaths[plat][x] = platformPaths[plat][x]
                 .replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine)
-                .replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
+                //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
                 .replace(/{me}/g, username)
                 .replace(/{mod}/g, config.ModName)
         )
