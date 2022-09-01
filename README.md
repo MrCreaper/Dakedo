@@ -7,7 +7,9 @@ A compiler that runs on anything with some quality of life features
 - bu (backups)
 - lbu{id} (loads backup, exclude id to unload backup)
 - listbu (list backups)
-- No "clear backups" command, you clear that on your own. Your tears.
+- {pak file} (adding path to the execution will decompile the pak or if you are using the release you can just drag the file on it)
+
+No "clear backups" command, you clear that on your own. Your tears.
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)

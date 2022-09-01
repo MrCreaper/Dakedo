@@ -4,7 +4,6 @@ const path = require('path');
 const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
-const { platform } = require('process');
 const chalk = require(`chalk`);
 
 function formatTime(time) {
@@ -133,6 +132,7 @@ function findModName() {
         SteamInstall: ``,
         CookingCmd: ``,
         PackingCmd: ``,
+        UnPackingCmd: ``,
         logs: "./logs.txt", // empty for no logs
         startDRG: false,
         dontKillDRG: false,
@@ -149,29 +149,39 @@ function findModName() {
             SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
             CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
             PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
+            UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}"`,
         },
         linux: {
             UnrealEngine: `/home/${username}/Documents/UE_4.27`,
             SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
             CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
             PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
+            UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}"`,
         },
         linuxwine: {
             UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
             SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
             CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
             PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
+            UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" ""{path}""`,
         },
         macos: {
             UnrealEngine: `no idea`,
             SteamInstall: `no idea`,
             CookingCmd: `no idea`,
             PackingCmd: `no idea`,
+            UnPackingCmd: `no idea`,
         },
     };
 
     Object.keys(platformPaths).forEach(plat =>
-        Object.keys(platformPaths[plat]).forEach(x => platformPaths[plat][x] = platformPaths[plat][x].replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine))
+        Object.keys(platformPaths[plat]).forEach(x =>
+            platformPaths[plat][x] = platformPaths[plat][x]
+                .replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine)
+                .replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
+                .replace(/{me}/g, username)
+                .replace(/{mod}/g, config.ModName)
+        )
     );
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
@@ -249,6 +259,10 @@ function findModName() {
     process.on('SIGUSR2', exitHandler);
     //catches uncaught exceptions
     process.on('uncaughtException', exitHandler);
+
+    // unpack from argument
+    var unpackFile = process.argv.find(x => x.includes(`.pak`));
+    if (unpackFile) return unpack(unpackFile);
 
     fs.writeFileSync(config.logs, ``);
 
@@ -464,6 +478,21 @@ function findModName() {
                     await keypress();
                     exitHandler();
                 } else exitHandler();
+            })
+            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+    }
+
+    function unpack(path) {
+        console.log(`unpacking ${path}`);
+        fs.appendFileSync(config.logs, `Unpackign ${path}`)
+        child.exec(config.UnPackingCmd.replace(`{path}`, path))
+            .on('exit', async () => {
+                var d = fs.readFileSync(config.logs);
+                if (d.includes(`LogPakFile: Error: Failed to load `)) {
+                    console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                    await keypress();
+                    exitHandler();
+                }
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
