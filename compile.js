@@ -172,7 +172,7 @@ function findModName() {
             PackingCmd: `no idea`,
             UnPackingCmd: `no idea`,
         },
-        givenUpos: {
+        givenUpos: { // fallback
             UnrealEngine: `no idea`,
             SteamInstall: `no idea`,
             CookingCmd: `no idea`,
