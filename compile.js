@@ -233,6 +233,12 @@ function findModName() {
 
     if (process.argv.includes(`-verify`)) return;
 
+    if (process.argv.includes(`-gogo`)) {
+        fs.rmSync(`${config.SteamInstall}/FSD/Content/Movies`, { recursive: true, force: true });
+        fs.rmSync(`${config.SteamInstall}/FSD/Content/Splash`, { recursive: true, force: true });
+        return;
+    }
+
     if (process.argv.includes(`-drg`))
         config.startDRG = !config.startDRG;
 
