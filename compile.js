@@ -5,6 +5,7 @@ const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
 const chalk = require(`chalk`);
+const zl = require("zip-lib");
 
 function formatTime(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
@@ -141,6 +142,8 @@ function findModName() {
         MaxBackups: -1,
         backupPak: false,
         backupBlacklist: [`.git`],
+        //zipBackups: false,
+        //modIoReady: false, // makes a pak-zip file at the compiler
     };
 
     var platformPaths = {
@@ -192,8 +195,8 @@ function findModName() {
     );
 
     const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-    var paths = platformPaths[`${os.platform().replace(`32`,``).replace(`Darwin`,`macos`)}${wine ? `wine` : ``}`];
-    if(!paths) paths = platformPaths.givenUpos;
+    var paths = platformPaths[`${os.platform().replace(`32`, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`];
+    if (!paths) paths = platformPaths.givenUpos;
 
     Object.keys(paths).forEach(key => {
         if (!config[key])
@@ -357,7 +360,7 @@ function findModName() {
             fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
             if (config.backupPak)
                 fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
-            if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.removeSync(x));
+            if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
             console.log(`Backup done! id: ${chalk.cyan(id)}`);
             r();
         })
@@ -366,8 +369,6 @@ function findModName() {
     if (process.argv.find(x => x.includes(`-listbu`))) { // list backups
         var backuppath = fs.readdirSync(`${__dirname}/backups`)
         if (!backuppath) return console.log(`Invalid backup id!`);
-        backuppath.sort((a, b) => {
-        });
         backuppath.sort(function (a, b) {
             var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
             var b = new Date(new Date().toUTCString()) - new Date(b.split(` - `)[1])
