@@ -138,10 +138,12 @@ var config = {
     logs: "./logs.txt", // empty for no logs
     startDRG: false,
     dontKillDRG: false,
-    backupOnCompile: true,
-    MaxBackups: -1,
-    backupPak: false,
-    backupBlacklist: [`.git`],
+    backup: {
+        onCompile: true,
+        max: -1,
+        pak: false,
+        blacklist: [`.git`],
+    },
     zip: {
         onCompile: true, // placed where the .pak folder is
         backups: false,
@@ -225,10 +227,17 @@ if (fs.existsSync(configPath) && !forceNew) {
         return;
     }
     tempconfig = JSON.parse(tempconfig);
-    Object.keys(config).forEach(x => {
-        if (tempconfig[x] && typeof config[x] == typeof tempconfig[x])
-            config[x] = tempconfig[x];
-    });
+    config = checkConfig(config);
+    function checkConfig(base = {}, check = {}) {
+        Object.keys(base).forEach(x => {
+            if (typeof x == `object`)
+                base[x] = checkConfig(base[x], check[x]);
+            else
+                if (check[x] && typeof base[x] == typeof check[x])
+                    base[x] = check[x];
+        });
+        return base;
+    }
 }
 
 // config ready, verify
@@ -388,7 +397,7 @@ function writeConfig(c) {
             console.log(`Making backup...`);
             if (!fs.existsSync(`${__dirname}/backups`))
                 fs.mkdirSync(`${__dirname}/backups`);
-            if (config.MaxBackups != -1) {
+            if (config.backup.max != -1) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
                     if (isNaN(aid)) return;
@@ -404,7 +413,7 @@ function writeConfig(c) {
                 }); // oldest => newest
                 backups.forEach((x, i) => {
                     //if(i == 0) return; // keep oldest as a keepsake
-                    if (backups.length - i - 1 > config.MaxBackups)
+                    if (backups.length - i - 1 > config.backup.max)
                         fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
                 });
             }
@@ -420,13 +429,13 @@ function writeConfig(c) {
             var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
             fs.mkdirSync(buf);
             fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
-            if (config.backupPak)
+            if (config.backup.pak)
                 fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
             if (config.zip.backups) {
                 await zl.archiveFolder(buf, `${buf}.zip`);
                 fs.rmSync(buf, { recursive: true, force: true })
             }
-            if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
+            if (config.backup.blacklist.length != 0) searchDir(buf, config.backup.blacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
             console.log(`Backup done! id: ${chalk.cyan(id)}`);
             r();
         })
@@ -557,7 +566,7 @@ function writeConfig(c) {
                     files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
                 }*/
 
-                if (config.backupOnCompile)
+                if (config.backup.onCompile)
                     await backup();
 
                 if (config.startDRG)
