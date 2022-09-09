@@ -16,7 +16,7 @@ Options require a "-" infront of them (exmaple: `./compile -drg` will toggle drg
 No "clear backups" command, you clear that on your own. Your tears.
 
 ## Config
-```json
+```yaml
 {
     ProjectName: "FSD", // kinda useless
     ModName: findModName(),
