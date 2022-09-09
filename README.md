@@ -8,12 +8,47 @@ Options require a "-" infront of them (exmaple: `./compile -drg` will toggle drg
 - drg (toggles startDRG)
 - bu (backups)
 - lbu{id} (loads backup, exclude id to unload backup)
-- listbu (list backups)
-- {pak file} (adding path to the execution will decompile the pak or if you are using the release you can just drag the file on it)
+- listbu (lists backups)
+- {pak file} (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
 - unpackdrg (unpacks drg)
 - publish (publishes version to modio)
 
 No "clear backups" command, you clear that on your own. Your tears.
+
+## Config
+```json
+    ProjectName: "FSD", // kinda useless
+    ModName: findModName(),
+    ProjectFile: `/../FSD.uproject`,
+    DirsToNeverCook: [], // folder named after ModName is automaticlly included
+    UnrealEngine: ``,
+    SteamInstall: ``,
+    CookingCmd: ``,
+    PackingCmd: ``,
+    UnPackingCmd: ``,
+    logs: "./logs.txt", // empty for no logs
+    startDRG: false,
+    dontKillDRG: false,
+    backup: {
+        onCompile: true,
+        max: -1,
+        pak: false,
+        blacklist: [`.git`],
+    },
+    zip: {
+        onCompile: true, // placed where the .pak folder is
+        backups: false,
+        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github with https://github.com/nickelc/upload-to-modio
+    },
+    modio: {
+        token: ``, // https://mod.io/me/access > oauth access
+        gameid: 2475,
+        modid: 0,
+        onCompile: false, // upload on compile?
+        deleteOther: true, // deletes older or non-active files
+        dateVersion: true, // make version from the date year.month.date, otherwise get version from project
+    },
+```
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
