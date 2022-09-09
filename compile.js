@@ -70,10 +70,170 @@ function findModName() {
     return name;
 }
 
+async function uploadMod(zip) {
+    return new Promise(async (r, re) => {
+        const d = new Date();
+        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, {
+            method: 'post',
+            headers: {
+                'Authorization': `Bearer ${config.modio.token}`,
+                'Content-Type': `multipart/form-data`,
+                'Accept': `application/json`,
+            },
+            body: JSON.stringify({
+                filedata: fs.readFileSync(zip, `binary`),
+                version: config.modioid.dateVersion ? `${d.getUTCFullYear()}.${d.getUTCMonth()}.${d.getUTCDate()}` : version,
+                active: true,
+                changelog: changelog
+            }),
+        });
+        if (res.status == 201)
+            r(true);
+        else r(res);
+    })
+};
+async function deleteMod(id) {
+    return new Promise(async (r, re) => {
+        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
+            method: 'delete',
+            headers: {
+                'Authorization': `Bearer ${config.modio.token}`,
+                'Content-Type': `application/x-www-form-urlencoded`,
+                'Accept': `application/json`,
+            },
+        });
+        if (res.status == 204)
+            r(true);
+        else r(res);
+    })
+};
+
+const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
+
+const username = os.userInfo().username;
+
+var config = {
+    ProjectName: "FSD", // kinda useless
+    ModName: findModName(),
+    ProjectFile: `/../FSD.uproject`,
+    DirsToNeverCook: [], // folder named after ModName is automaticlly included
+    UnrealEngine: ``,
+    SteamInstall: ``,
+    CookingCmd: ``,
+    PackingCmd: ``,
+    UnPackingCmd: ``,
+    logs: "./logs.txt", // empty for no logs
+    startDRG: false,
+    dontKillDRG: false,
+    backupOnCompile: true,
+    MaxBackups: -1,
+    backupPak: false,
+    backupBlacklist: [`.git`],
+    zip: {
+        onCompile: true, // placed where the .pak folder is
+        backups: false,
+        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github with https://github.com/nickelc/upload-to-modio
+    },
+    modio: {
+        token: ``, // https://mod.io/me/access > oauth access
+        gameid: 2475,
+        modid: 0,
+        onCompile: false, // upload on compile?
+        deleteOther: true, // deletes older or non-active files
+        dateVersion: true, // make version from the date year.month.date, otherwise get version from project
+    },
+};
+
+var platformPaths = {
+    win: {
+        UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
+        SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
+        PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
+        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}"`,
+    },
+    linux: {
+        UnrealEngine: `/home/${username}/Documents/UE_4.27`,
+        SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
+        PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
+        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}"`,
+    },
+    linuxwine: {
+        UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
+        SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
+        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
+        PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
+        UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" ""{path}""`,
+    },
+    macos: {
+        UnrealEngine: `no idea`,
+        SteamInstall: `no idea`,
+        CookingCmd: `no idea`,
+        PackingCmd: `no idea`,
+        UnPackingCmd: `no idea`,
+    },
+    givenUpos: { // fallback
+        UnrealEngine: `no idea`,
+        SteamInstall: `no idea`,
+        CookingCmd: `no idea`,
+        PackingCmd: `no idea`,
+        UnPackingCmd: `no idea`,
+    },
+};
+
+Object.keys(platformPaths).forEach(plat =>
+    Object.keys(platformPaths[plat]).forEach(x =>
+        platformPaths[plat][x] = platformPaths[plat][x]
+            .replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine)
+            //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
+            .replace(/{me}/g, username)
+            .replace(/{mod}/g, config.ModName)
+    )
+);
+
+const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
+var paths = platformPaths[`${os.platform().replace(`32`, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`];
+if (!paths) paths = platformPaths.givenUpos;
+
+Object.keys(paths).forEach(key => {
+    if (!config[key])
+        config[key] = paths[key]
+});
+
+const configPath = `${__dirname}/config.json`;
+const forceNew = false;
+if (fs.existsSync(configPath) && !forceNew) {
+    var tempconfig = fs.readFileSync(configPath);
+    if (!isJsonString(tempconfig)) {
+        writeConfig(config);
+        console.log("Config fucked, please update it again.");
+        exitHandler();
+        return;
+    }
+    tempconfig = JSON.parse(tempconfig);
+    Object.keys(config).forEach(x => {
+        if (tempconfig[x] && typeof config[x] == typeof tempconfig[x])
+            config[x] = tempconfig[x];
+    });
+}
+
+// config ready, verify
+if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
+if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return console.log(`Couldnt find project file`);
+if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4`);
+if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg`);
+
+if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log(`Couldnt find Config/DefaultGame.ini`);
+
+writeConfig(config);
+function writeConfig(c) {
+    fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
+}
+
 (async () => {
     if (process.getuid() == 0) {
         console.log(`Refusing to run as root`);
-        await keypress();
         return exitHandler();
     }
     __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
@@ -120,119 +280,6 @@ function findModName() {
         });
     }
     await update();
-    const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
-
-    const username = os.userInfo().username;
-
-    var config = {
-        ProjectName: "FSD", // kinda useless
-        ModName: findModName(),
-        ProjectFile: `/../FSD.uproject`,
-        DirsToNeverCook: [], // folder named after ModName is automaticlly included
-        UnrealEngine: ``,
-        SteamInstall: ``,
-        CookingCmd: ``,
-        PackingCmd: ``,
-        UnPackingCmd: ``,
-        logs: "./logs.txt", // empty for no logs
-        startDRG: false,
-        dontKillDRG: false,
-        leaveWhenDone: true,
-        backupOnCompile: true,
-        MaxBackups: -1,
-        backupPak: false,
-        backupBlacklist: [`.git`],
-        //zipBackups: false,
-        //modIoReady: false, // makes a pak-zip file at the compiler
-    };
-
-    var platformPaths = {
-        win: {
-            UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
-            SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
-            CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-            PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
-            UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}"`,
-        },
-        linux: {
-            UnrealEngine: `/home/${username}/Documents/UE_4.27`,
-            SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-            CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-            PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
-            UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}"`,
-        },
-        linuxwine: {
-            UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
-            SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-            CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
-            PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
-            UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" ""{path}""`,
-        },
-        macos: {
-            UnrealEngine: `no idea`,
-            SteamInstall: `no idea`,
-            CookingCmd: `no idea`,
-            PackingCmd: `no idea`,
-            UnPackingCmd: `no idea`,
-        },
-        givenUpos: { // fallback
-            UnrealEngine: `no idea`,
-            SteamInstall: `no idea`,
-            CookingCmd: `no idea`,
-            PackingCmd: `no idea`,
-            UnPackingCmd: `no idea`,
-        },
-    };
-
-    Object.keys(platformPaths).forEach(plat =>
-        Object.keys(platformPaths[plat]).forEach(x =>
-            platformPaths[plat][x] = platformPaths[plat][x]
-                .replace(/{UnrealEngine}/g, platformPaths[plat].UnrealEngine)
-                //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
-                .replace(/{me}/g, username)
-                .replace(/{mod}/g, config.ModName)
-        )
-    );
-
-    const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-    var paths = platformPaths[`${os.platform().replace(`32`, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`];
-    if (!paths) paths = platformPaths.givenUpos;
-
-    Object.keys(paths).forEach(key => {
-        if (!config[key])
-            config[key] = paths[key]
-    });
-
-    const configPath = `${__dirname}/config.json`;
-    const forceNew = false;
-    if (fs.existsSync(configPath) && !forceNew) {
-        var tempconfig = fs.readFileSync(configPath);
-        if (!isJsonString(tempconfig)) {
-            writeConfig(config);
-            console.log("Config fucked, please update it again.");
-            await keypress();
-            exitHandler();
-            return;
-        }
-        tempconfig = JSON.parse(tempconfig);
-        Object.keys(config).forEach(x => {
-            if (tempconfig[x] && typeof config[x] == typeof tempconfig[x])
-                config[x] = tempconfig[x];
-        });
-    }
-
-    // config ready, verify
-    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
-    if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return console.log(`Couldnt find project file`);
-    if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4`);
-    if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg`);
-
-    if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log(`Couldnt find Config/DefaultGame.ini`);
-
-    writeConfig(config);
-    function writeConfig(c) {
-        fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
-    }
 
     if (process.argv.includes(`-verify`)) return;
 
@@ -266,6 +313,8 @@ function findModName() {
             cookingChild.destroy();
         if (err && err != `SIGINT`)
             console.log(err);
+        if (process.pkg)
+            await keypress();
         process.exit();
     }
     process.on('exit', exitHandler);
@@ -321,8 +370,8 @@ function findModName() {
     if (process.argv.includes(`-bu`))
         return backup();
 
-    function backup() {
-        return new Promise(r => {
+    module.exports.backup = function backup() {
+        return new Promise(async r => {
             console.log(`Making backup...`);
             if (!fs.existsSync(`${__dirname}/backups`))
                 fs.mkdirSync(`${__dirname}/backups`);
@@ -342,8 +391,8 @@ function findModName() {
                 }); // oldest => newest
                 backups.forEach((x, i) => {
                     //if(i == 0) return; // keep oldest as a keepsake
-                    if (backups.length - i > config.MaxBackups)
-                        fs.rm(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                    if (backups.length - i - 1 > config.MaxBackups)
+                        fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
                 });
             }
             var id = -1;
@@ -355,11 +404,15 @@ function findModName() {
                     id = xid;
             });
             id++;
-            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`;
+            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
             fs.mkdirSync(buf);
             fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
             if (config.backupPak)
                 fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
+            if (config.zip.backups) {
+                await zl.archiveFolder(buf, `${buf}.zip`);
+                fs.rmSync(buf, { recursive: true, force: true })
+            }
             if (config.backupBlacklist.length != 0) searchDir(buf, config.backupBlacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
             console.log(`Backup done! id: ${chalk.cyan(id)}`);
             r();
@@ -380,7 +433,6 @@ function findModName() {
             console.log(`${x.split(` - `)[0]} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1]))}`);
         });
         console.log(`\nBackups: ${backuppath.length}`);
-        await keypress();
         exitHandler()
         return;
     }
@@ -388,7 +440,7 @@ function findModName() {
     if (process.argv.find(x => x.includes(`-lbu`)))
         return loadbackup(process.argv.find(x => x.includes(`-lbu`)).replace(`-lbu`, ``));
 
-    function refreshDirsToNeverCook(whitelist = []) {
+    module.exports.refreshDirsToNeverCook = function refreshDirsToNeverCook(whitelist = []) {
         whitelist.concat(config.DirsToNeverCook)
         var configFile = `${__dirname}/../Config/DefaultGame.ini`;
         var read = fs.readFileSync(configFile, `utf8`).split(`\n`);
@@ -405,7 +457,7 @@ function findModName() {
         fs.writeFileSync(configFile, read.join(`\n`));
     }
 
-    function loadbackup(id) {
+    module.exports.loadbackup = function loadbackup(id) {
         if (!id) {
             if (!fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`))
                 console.log(`Missing id.`)
@@ -414,7 +466,7 @@ function findModName() {
                 if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`))
                     fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
                 fs.renameSync(`${__dirname}/../Content/${config.ModName} Latest`, `${__dirname}/../Content/${config.ModName}`);
-                console.log(`Unloaded backup.`);;
+                console.log(`Unloaded backup.`);
                 return;
             }
         }
@@ -423,12 +475,19 @@ function findModName() {
         if (!backuppath) return console.log(`Invalid backup id!`);
         var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
         console.log(`Loading backup ${folder.split(` - `)[0]} from ${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
+
         if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
             console.log(`Backup already loaded, removing.`);
             fs.rmSync(`${__dirname}/../Content/${config.ModName}`, { recursive: true, force: true });
         }
-        fs.renameSync(`${__dirname}/../Content/${config.ModName}`, `${__dirname}/../Content/${config.ModName} Latest`);
-        fs.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
+
+        if (folder.endsWith(`.zip`))
+            zl.extract(backuppath, `${__dirname}/../Content/${config.ModName}`).then(function () {
+            }, console.log);
+        else {
+            fs.renameSync(`${__dirname}/../Content/${config.ModName}`, `${__dirname}/../Content/${config.ModName} Latest`);
+            fs.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
+        }
         refreshDirsToNeverCook([config.ModName]);
     }
 
@@ -437,7 +496,7 @@ function findModName() {
     //return child.exec(`wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
 
-    function pack() {
+    function pack(config = config) {
         console.log(`packing ${config.ModName}...`);
         fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n\n`);
 
@@ -455,13 +514,22 @@ function findModName() {
                 var d = fs.readFileSync(config.logs);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
                     console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
-                    await keypress();
                     exitHandler();
                 }
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
                 console.log(`Packed!`);
+
+                if (config.zip.onCompile) {
+                    console.log("Zipping...");
+                    zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`).then(function () {
+                        console.log("Zipped!");
+                        config.zip.to.forEach(dir =>
+                            fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
+                        );
+                    }, console.log);
+                }
 
                 if (config.backupOnCompile)
                     await backup();
@@ -490,16 +558,11 @@ function findModName() {
                 }*/
 
                 console.log(`Done!`);
-                if (!config.leaveWhenDone) {
-                    console.log("Press enter to get out!");
-                    await keypress();
-                    exitHandler();
-                } else exitHandler();
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
-    function unpack(path) {
+    module.exports.unpack = function unpack(path) {
         console.log(`unpacking ${path}`);
         fs.appendFileSync(config.logs, `Unpackign ${path}`)
         child.exec(config.UnPackingCmd.replace(`{path}`, path))
@@ -507,7 +570,6 @@ function findModName() {
                 var d = fs.readFileSync(config.logs);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
                     console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
-                    await keypress();
                     exitHandler();
                 }
             })
@@ -518,7 +580,6 @@ function findModName() {
     /*if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
         console.log(`\nNo access to /Saved/Cooked/WindowsNoEditor`);
         if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${__dirname}/../Saved/Cooked/WindowsNoEditor`);
-        //await keypress();
         //return exitHandler();
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }
@@ -526,7 +587,6 @@ function findModName() {
     if (fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !fs.accessSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
         console.log(`\nNo access to ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
         if (platform == `linux`) console.log(`Please run:\nchmod 7777 -R ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
-        //await keypress();
         //return exitHandler();
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }*/
@@ -545,67 +605,106 @@ function findModName() {
     console.log(`cooking ${config.ModName}...`);
     refreshDirsToNeverCook([config.ModName]);
     fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n\n`);
+    cook();
 
-    var cookingChild = child.exec(config.CookingCmd)
-        .on('exit', async () => {
-            var d = fs.readFileSync(config.logs, `utf8`);
-            if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
-                console.log(`Cooked!`);
-                pack();
-            } else if (d.includes(`LogInit: Display: Failure - `)) {
-                var errsFound = false;
-                var errs = 0;
-                var errorsLogs = ``;
-                d.split(`\n`).forEach(x => {
-                    if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
-                    errs++;
-                    try {
-                        var log = x
-                            .split(`[  0]`)[1] // after timestamp
-                            .replace(/LogInit: Display: /g, ``)
-                            .replace(/ Error: /g, ``)
-                            //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
-                            .replace(/FStructProperty::Serialize Loading: Property /g, ``)
-                            .replace(/StructProperty /g, ``)
-                            .replace(/\/Game/g, ``) // file path start
-                            .replace(/_C:/g, ` > `) // after file
-                            .replace(/:CallFunc_/g, ` > (function) `)
-                            .replace(/ExecuteUbergraph_/g, ` > (graph) `)
-                            .replace(/\[AssetLog\]/g, ``)
-                            .replace(/\\/g, `/`)
-                            .replace(/>  >/g, `>`)
-                            .replace(/:/g, ` > `)
-                            .replace(/'/g, ``)
-                            .replace(/_/g, ` `)
-                            .replace(`. `, ` | ERR: `);
-                        log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
-                        //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
-                        while (log.split(` `).find(x => x.includes(`.`))) {
-                            log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
-                        }
-                        errorsLogs += `${log}\n`;
-                    } catch (err) {
-                        console.log(`BEAUTY ERROR: ${x}`);
-                        console.log(err);
-                        errorsLogs += `${x}\n`;
+    module.exports.cook = () => {
+        var logs = ``;
+        return new Promise(r => {
+            child.exec(config.CookingCmd)
+                .on('exit', async () => {
+                    if (logs.includes(`LogInit: Display: Success - 0 error(s),`))
+                        r(true);
+                    else if (logs.includes(`LogInit: Display: Failure - `))
+                        r(false);
+                    else r(false);
+                })
+                .stdout.on('data', (d) => logs += String(d));
+        });
+    }
+    module.exports.pack = (outPath) => {
+        var logs = ``;
+        return new Promise(r => {
+            if (fs.existsSync(`${__dirname}/temp/`) && !logsDisabled)
+                fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
+            else
+                fs.mkdirSync(`${__dirname}/temp/`);
+            fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
+            if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return console.log(`Cooking fucked up.`);
+            fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
+            fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
+
+            child.exec(config.PackingCmd)
+                .on('exit', async () => {
+                    if (logs.includes(`LogPakFile: Error: Failed to load `)) {
+                        console.log(`Failed to load ${logs.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                        return r();
                     }
-                });
-                console.log(`Errors ${errs}:\n\n${errorsLogs}`);
-                if (logsDisabled) {
-                    console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
-                    fs.renameSync(config.logs, `${__dirname}/logs.txt`);
-                    await keypress();
+                    fs.moveSync(`${__dirname}/temp/${config.ModName}.pak`, outPath);
+                    r();
+                })
+                .stdout.on('data', (d) => logs += String(d));
+        });
+    };
+    var cookingChild;
+    function cook() {
+        cookingChild = child.exec(config.CookingCmd)
+            .on('exit', async () => {
+                var d = fs.readFileSync(config.logs, `utf8`);
+                if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
+                    console.log(`Cooked!`);
+                    pack();
+                } else if (d.includes(`LogInit: Display: Failure - `)) {
+                    var errsFound = false;
+                    var errs = 0;
+                    var errorsLogs = ``;
+                    d.split(`\n`).forEach(x => {
+                        if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
+                        errs++;
+                        try {
+                            var log = x
+                                .split(`[  0]`)[1] // after timestamp
+                                .replace(/LogInit: Display: /g, ``)
+                                .replace(/ Error: /g, ``)
+                                //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
+                                .replace(/FStructProperty::Serialize Loading: Property /g, ``)
+                                .replace(/StructProperty /g, ``)
+                                .replace(/\/Game/g, ``) // file path start
+                                .replace(/_C:/g, ` > `) // after file
+                                .replace(/:CallFunc_/g, ` > (function) `)
+                                .replace(/ExecuteUbergraph_/g, ` > (graph) `)
+                                .replace(/\[AssetLog\]/g, ``)
+                                .replace(/\\/g, `/`)
+                                .replace(/>  >/g, `>`)
+                                .replace(/:/g, ` > `)
+                                .replace(/'/g, ``)
+                                .replace(/_/g, ` `)
+                                .replace(`. `, ` | ERR: `);
+                            log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
+                            //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
+                            while (log.split(` `).find(x => x.includes(`.`))) {
+                                log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+                            }
+                            errorsLogs += `${log}\n`;
+                        } catch (err) {
+                            console.log(`BEAUTY ERROR: ${x}`);
+                            console.log(err);
+                            errorsLogs += `${x}\n`;
+                        }
+                    });
+                    console.log(`Errors ${errs}:\n\n${errorsLogs}`);
+                    if (logsDisabled) {
+                        console.log(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
+                        fs.renameSync(config.logs, `${__dirname}/logs.txt`);
+                        exitHandler();
+                        return;
+                    }
+                    console.log(`${errsFound ? `\n` : ``}Failed. Check the logs${errsFound ? ` (or check the above)` : ``} and fix your damn "code"`);
                     exitHandler();
-                    return;
+                } else {
+                    console.log(`What the fuck did you do.`);
+                    exitHandler();
                 }
-                console.log(`${errsFound ? `\n` : ``}Failed. Check the logs${errsFound ? ` (or check the above)` : ``} and fix your damn "code"`);
-                await keypress();
-                exitHandler();
-            } else {
-                console.log(`What the fuck did you do.`);
-                await keypress();
-                exitHandler();
-            }
-        })
-        .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+            })
+            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+    }
 })();
