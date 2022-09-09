@@ -11,6 +11,7 @@ Options require a "-" infront of them (exmaple: `./compile -drg` will toggle drg
 - listbu (list backups)
 - {pak file} (adding path to the execution will decompile the pak or if you are using the release you can just drag the file on it)
 - unpackdrg (unpacks drg)
+- publish (publishes version to modio)
 
 No "clear backups" command, you clear that on your own. Your tears.
 

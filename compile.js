@@ -92,7 +92,7 @@ async function uploadMod(zip) {
         else r(res);
     })
 };
-async function deleteMod(id) {
+async function deleteModFile(id) {
     return new Promise(async (r, re) => {
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
             method: 'delete',
@@ -104,6 +104,19 @@ async function deleteMod(id) {
         });
         if (res.status == 204)
             r(true);
+        else r(res);
+    })
+};
+async function getFiles() {
+    return new Promise(async (r, re) => {
+        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files?api_key=${config.modio.token}`, {
+            method: 'get',
+            headers: {
+                'Accept': `application/json`,
+            },
+        });
+        if (res.status == 200)
+            r((await res.json()).data);
         else r(res);
     })
 };
@@ -523,18 +536,31 @@ function writeConfig(c) {
 
                 if (config.zip.onCompile) {
                     console.log("Zipping...");
-                    zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`).then(function () {
-                        console.log("Zipped!");
-                        config.zip.to.forEach(dir =>
-                            fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
-                        );
-                    }, console.log);
+                    await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)
+                    console.log("Zipped!");
+                    config.zip.to.forEach(dir =>
+                        fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
+                    );
                 }
+
+                if (process.argv.includes(`-publish`) || config.modio.onCompile) {
+                    var madeZip = false;
+                    if (!fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)) {
+                        await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
+                        madeZip = true;
+                    }
+                    uploadMod(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
+                    if (madeZip) fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
+                }
+                /*if(config.modio.deleteOther){
+                    var files = await getFiles();
+                    files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
+                }*/
 
                 if (config.backupOnCompile)
                     await backup();
 
-                if (config.startDRG) {
+                if (config.startDRG)
                     await new Promise(r => {
                         console.log(`Launching DRG...`);
                         child.exec(`steam steam://rungameid/548430`)
@@ -545,7 +571,6 @@ function writeConfig(c) {
                             .on(`message`, (d) => fs.appendFileSync(config.logs, String(d)))
                             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
                     })
-                }
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
                 /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
