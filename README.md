@@ -55,6 +55,11 @@ No "clear backups" command, you clear that on your own. Your tears.
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
 
+Also if you oh so wish, I have exposed some of the functions.
+So you can just do `var compiler = require('./compile.js')` and mess around.
+It dose use the config.json configs, keep that in mind I guess.
+(or just change the config variable :D)
+
 # Linux Wine UE4
 
 ## [Native](https://docs.unrealengine.com/4.27/en-US/SharingAndReleasing/Linux/BeginnerLinuxDeveloper/SettingUpAnUnrealWorkflow/) pros and cons

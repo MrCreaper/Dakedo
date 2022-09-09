@@ -70,7 +70,7 @@ function findModName() {
     return name;
 }
 
-async function uploadMod(zip) {
+module.exports.upload = async function uploadMod(zip) {
     return new Promise(async (r, re) => {
         const d = new Date();
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, {
@@ -92,7 +92,7 @@ async function uploadMod(zip) {
         else r(res);
     })
 };
-async function deleteModFile(id) {
+module.exports.upload = async function deleteModFile(id) {
     return new Promise(async (r, re) => {
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
             method: 'delete',
@@ -107,7 +107,7 @@ async function deleteModFile(id) {
         else r(res);
     })
 };
-async function getFiles() {
+module.exports.upload = async function getFiles() {
     return new Promise(async (r, re) => {
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files?api_key=${config.modio.token}`, {
             method: 'get',
@@ -239,6 +239,7 @@ if (fs.existsSync(configPath) && !forceNew) {
         return base;
     }
 }
+module.exports.config = config;
 
 // config ready, verify
 if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`)) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
