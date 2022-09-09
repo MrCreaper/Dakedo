@@ -137,7 +137,7 @@ var config = {
     UnPackingCmd: ``,
     logs: "./logs.txt", // empty for no logs
     startDRG: false,
-    dontKillDRG: false,
+    killDRG: true,
     backup: {
         onCompile: true,
         max: -1,
@@ -625,7 +625,7 @@ function writeConfig(c) {
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }*/
 
-    if (config.startDRG && !config.dontKillDRG) { // kill drg and before cooking to save ram
+    if (config.startDRG && !config.killDRG) { // kill drg and before cooking to save ram
         var prcList = await find('name', 'FSD');
         //console.log(prcList);
         prcList.forEach(x => {
