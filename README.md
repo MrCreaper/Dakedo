@@ -17,6 +17,7 @@ No "clear backups" command, you clear that on your own. Your tears.
 
 ## Config
 ```json
+{
     ProjectName: "FSD", // kinda useless
     ModName: findModName(),
     ProjectFile: `/../FSD.uproject`,
@@ -48,6 +49,7 @@ No "clear backups" command, you clear that on your own. Your tears.
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
     },
+}
 ```
 
 ### development
