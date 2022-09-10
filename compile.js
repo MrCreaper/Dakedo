@@ -70,6 +70,15 @@ function findModName() {
     return name;
 }
 
+function findModVersion() {
+    whitelist.concat(config.DirsToNeverCook)
+    var configFile = `${__dirname}/../Config/DefaultGame.ini`;
+    var read = fs.readFileSync(configFile, `utf8`).split(`\n`);
+    var raw = read.find(x => x.startsWith(`ProjectVersion=`)).replace(`ProjectVersion=`,``);
+    if(!raw)return `unVersioned`;
+    return raw;
+}
+
 module.exports.upload = async function uploadMod(zip) {
     return new Promise(async (r, re) => {
         const d = new Date();
@@ -82,7 +91,7 @@ module.exports.upload = async function uploadMod(zip) {
             },
             body: JSON.stringify({
                 filedata: fs.readFileSync(zip, `binary`),
-                version: config.modioid.dateVersion ? `${d.getUTCFullYear()}.${d.getUTCMonth()}.${d.getUTCDate()}` : version,
+                version: config.modioid.dateVersion ? `${d.getUTCFullYear()}.${d.getUTCMonth()}.${d.getUTCDate()}` : findModVersion(),
                 active: true,
                 changelog: changelog
             }),
@@ -147,13 +156,13 @@ var config = {
     zip: {
         onCompile: true, // placed where the .pak folder is
         backups: false,
-        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github with https://github.com/nickelc/upload-to-modio
+        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: ``, // https://mod.io/me/access > oauth access
         gameid: 2475,
         modid: 0,
-        onCompile: false, // upload on compile?
+        onCompile: false, // upload on compile
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
     },

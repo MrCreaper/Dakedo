@@ -2,7 +2,7 @@
 A compiler that runs on anything with some quality of life features
 
 ## Compiler Options
-Options require a "-" infront of them (example: `./compile -drg` will toggle drg config)
+Options require a "-" prefix (example: `./compile -drg` will toggle drg config)
 - verify (verifies settings, prob)
 - {mod name} (just adding a mod name will set it as the ModName for the compile)
 - drg (toggles startDRG)
@@ -39,18 +39,24 @@ No "clear backups" command, you clear that on your own. Your tears.
     zip: {
         onCompile: true, // placed where the .pak folder is
         backups: false,
-        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github with https://github.com/nickelc/upload-to-modio
+        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: ``, // https://mod.io/me/access > oauth access
         gameid: 2475,
         modid: 0,
-        onCompile: false, // upload on compile?
+        onCompile: false, // upload on compile
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
     },
 }
 ```
+
+## Install
+1. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases/latest) of this (unless you wana run it raw with node) and add to the project folder, **IN ITS OWN SPECIAL LITTLE FOLDER**
+- (optional) make a link to the compiler :)
+2. Run for first time setup
+- Setup config.json
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
@@ -102,7 +108,3 @@ sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install -y wine
 4. Download Unreal Engine 4.27
 - (optional) Remove optional garbage
 5. Get something like the [template project](https://github.com/DRG-Modding/FSD-Template)
-6. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases) of this (unless you wana run it raw with node) and add to the project folder, **IN ITS OWN SPECIAL LITTLE FOLDER**
-- (optional) make a link to the compiler :)
-7. Run for first time setup
-- Setup config.json
