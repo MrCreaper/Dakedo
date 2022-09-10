@@ -2,7 +2,7 @@
 A compiler that runs on anything with some quality of life features
 
 ## Compiler Options
-Options require a "-" infront of them (exmaple: `./compile -drg` will toggle drg config)
+Options require a "-" infront of them (example: `./compile -drg` will toggle drg config)
 - verify (verifies settings, prob)
 - {mod name} (just adding a mod name will set it as the ModName for the compile)
 - drg (toggles startDRG)
@@ -29,7 +29,7 @@ No "clear backups" command, you clear that on your own. Your tears.
     UnPackingCmd: ``,
     logs: "./logs.txt", // empty for no logs
     startDRG: false,
-    dontKillDRG: false,
+    killDRG: true,
     backup: {
         onCompile: true,
         max: -1,

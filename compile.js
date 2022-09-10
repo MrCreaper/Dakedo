@@ -227,10 +227,10 @@ if (fs.existsSync(configPath) && !forceNew) {
         return;
     }
     tempconfig = JSON.parse(tempconfig);
-    config = checkConfig(config);
+    config = checkConfig(config, tempconfig);
     function checkConfig(base = {}, check = {}) {
         Object.keys(base).forEach(x => {
-            if (typeof x == `object`)
+            if (typeof base[x] == `object`)
                 base[x] = checkConfig(base[x], check[x]);
             else
                 if (check[x] && typeof base[x] == typeof check[x])
@@ -357,43 +357,61 @@ function writeConfig(c) {
 
     fs.writeFileSync(config.logs, ``);
 
-    var maxConfigKeyLenght = 0;
-    Object.keys(config).forEach(x => {
-        if (x.length > maxConfigKeyLenght)
-            maxConfigKeyLenght = x.length;
-    });
-    Object.keys(config).forEach(x => {
-        if (!chalk) return console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`);
-        var coloredVal = ``;
-        switch (typeof config[x]) {
-            case `object`:
-                coloredVal = chalk.cyan(JSON.stringify(config[x]));
-                break;
-            case `boolean`:
-                if (config[x])
-                    coloredVal = chalk.green(config[x]);
-                else
-                    coloredVal = chalk.red(config[x]);
-                break;
-            case `number`:
-                coloredVal = chalk.greenBright(config[x]);
-                break;
-            case `string`:
-                coloredVal = chalk.redBright(config[x]);
-                break;
-            case `undefined`:
-                coloredVal = chalk.blue(config[x]);
-                break;
-        }
-        console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${coloredVal}`);
-    });
+    logConfig(config);
+    function logConfig(config = config, depth = 0) {
+        var maxConfigKeyLenght = 0;
+        Object.keys(config).forEach(x => {
+            if (x.length > maxConfigKeyLenght)
+                maxConfigKeyLenght = x.length;
+        });
+        Object.keys(config).forEach(x => {
+            if (!chalk) return console.log(`${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${typeof config[x] == `object` ? JSON.stringify(config[x]) : config[x]}`);
+            var coloredVal = ``;
+            var logged = false;
+            function logConf() {
+                if (!logged) {
+                    var log = `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${coloredVal}`;
+                    console.log(log.padStart(log.length + depth * 3));
+                }
+                logged = true;
+            }
+            switch (typeof config[x]) {
+                case `object`:
+                    if (Array.isArray(config[x])) {
+                        coloredVal = chalk.cyan(JSON.stringify(config[x]));
+                        logConf()
+                    } else {
+                        logConf();
+                        logConfig(config[x], depth + 1);
+                    }
+                    break;
+                case `boolean`:
+                    if (config[x])
+                        coloredVal = chalk.green(config[x]);
+                    else
+                        coloredVal = chalk.red(config[x]);
+                    break;
+                case `number`:
+                    coloredVal = chalk.greenBright(config[x]);
+                    break;
+                case `string`:
+                    coloredVal = chalk.redBright(config[x]);
+                    break;
+                case `undefined`:
+                    coloredVal = chalk.blue(config[x]);
+                    break;
+            }
+            logConf();
+        });
+    }
+
     console.log();
     fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`))
         return backup();
 
-    module.exports.backup = function backup() {
+    module.exports.backup = backup = function backup() {
         return new Promise(async r => {
             console.log(`Making backup...`);
             if (!fs.existsSync(`${__dirname}/backups`))
@@ -463,7 +481,7 @@ function writeConfig(c) {
     if (process.argv.find(x => x.includes(`-lbu`)))
         return loadbackup(process.argv.find(x => x.includes(`-lbu`)).replace(`-lbu`, ``));
 
-    module.exports.refreshDirsToNeverCook = function refreshDirsToNeverCook(whitelist = []) {
+    module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function refreshDirsToNeverCook(whitelist = []) {
         whitelist.concat(config.DirsToNeverCook)
         var configFile = `${__dirname}/../Config/DefaultGame.ini`;
         var read = fs.readFileSync(configFile, `utf8`).split(`\n`);
@@ -480,7 +498,7 @@ function writeConfig(c) {
         fs.writeFileSync(configFile, read.join(`\n`));
     }
 
-    module.exports.loadbackup = function loadbackup(id) {
+    module.exports.loadbackup = loadbackup = function loadbackup(id) {
         if (!id) {
             if (!fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`))
                 console.log(`Missing id.`)
@@ -519,7 +537,7 @@ function writeConfig(c) {
     //return child.exec(`wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
 
-    function pack(config = config) {
+    function pack() {
         console.log(`packing ${config.ModName}...`);
         fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n\n`);
 
@@ -597,7 +615,7 @@ function writeConfig(c) {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
-    module.exports.unpack = function unpack(path) {
+    module.exports.unpack = unpack = function unpack(path) {
         console.log(`unpacking ${path}`);
         fs.appendFileSync(config.logs, `Unpackign ${path}`)
         child.exec(config.UnPackingCmd.replace(`{path}`, path))
@@ -626,7 +644,7 @@ function writeConfig(c) {
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }*/
 
-    if (config.startDRG && !config.killDRG) { // kill drg and before cooking to save ram
+    if (config.startDRG && config.killDRG) { // kill drg and before cooking to save ram
         var prcList = await find('name', 'FSD');
         //console.log(prcList);
         prcList.forEach(x => {
