@@ -1,6 +1,6 @@
 const fs = require('fs-extra');
 const child = require(`child_process`);
-const path = require('path');
+const PATH = require('path');
 const find = require('find-process');
 const https = require(`https`);
 const os = require(`os`);
@@ -74,8 +74,8 @@ function findModVersion() {
     whitelist.concat(config.DirsToNeverCook)
     var configFile = `${__dirname}/../Config/DefaultGame.ini`;
     var read = fs.readFileSync(configFile, `utf8`).split(`\n`);
-    var raw = read.find(x => x.startsWith(`ProjectVersion=`)).replace(`ProjectVersion=`,``);
-    if(!raw)return `unVersioned`;
+    var raw = read.find(x => x.startsWith(`ProjectVersion=`)).replace(`ProjectVersion=`, ``);
+    if (!raw) return `unVersioned`;
     return raw;
 }
 
@@ -174,21 +174,21 @@ var platformPaths = {
         SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
         CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
         PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt`,
-        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}"`,
+        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
     },
     linux: {
         UnrealEngine: `/home/${username}/Documents/UE_4.27`,
         SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
         CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
         PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/${config.ModName}.pak -Create="${__dirname}/temp/Input.txt"`,
-        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}"`,
+        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
     },
     linuxwine: {
         UnrealEngine: `/home/${username}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         SteamInstall: `/home/${username}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
         CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
         PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/${config.ModName}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
-        UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" ""{path}""`,
+        UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}"`,
     },
     macos: {
         UnrealEngine: `no idea`,
@@ -268,7 +268,7 @@ function writeConfig(c) {
         console.log(`Refusing to run as root`);
         return exitHandler();
     }
-    __dirname = path.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
+    __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     var updateCompleted = false;
     async function update() {
         const repo = `MrCreaper/drg-linux-modding`;
@@ -314,6 +314,7 @@ function writeConfig(c) {
     await update();
 
     if (process.argv.includes(`-verify`)) return;
+    //if (process.argv.includes(`-help`)) return console.log(``);
 
     if (process.argv.includes(`-gogo`)) {
         fs.rmSync(`${config.SteamInstall}/FSD/Content/Movies`, { recursive: true, force: true });
@@ -361,8 +362,6 @@ function writeConfig(c) {
     // unpack from argument
     var unpackFile = process.argv.find(x => x.includes(`.pak`));
     if (unpackFile) return unpack(unpackFile);
-
-    if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
 
     fs.writeFileSync(config.logs, ``);
 
@@ -624,19 +623,27 @@ function writeConfig(c) {
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
 
-    module.exports.unpack = unpack = function unpack(path) {
+    module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
+        if (wine) {
+            path = `Z:${path}`;
+            outpath = `Z:${outpath}`;
+        }
         console.log(`unpacking ${path}`);
-        fs.appendFileSync(config.logs, `Unpackign ${path}`)
-        child.exec(config.UnPackingCmd.replace(`{path}`, path))
+        fs.appendFileSync(config.logs, `Unpacking ${path}\n`)
+        child.exec(config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath))
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
                     console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
                     exitHandler();
+                } else if (d.includes(`LogPakFile: Display: Extracted `)) {
+                    console.log(`Extracted ${chalk.cyan(PATH.basename(path))}`);
+                    exitHandler();
                 }
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
+    if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
 
     // idk fs.access just false all the time.
     /*if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
