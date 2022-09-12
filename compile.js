@@ -571,9 +571,7 @@ function writeConfig(c) {
                 console.log(`Packed!`);
 
                 if (config.zip.onCompile) {
-                    console.log("Zipping...");
                     await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)
-                    console.log("Zipped!");
                     config.zip.to.forEach(dir =>
                         fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
                     );
@@ -624,12 +622,12 @@ function writeConfig(c) {
     }
 
     module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
+        console.log(`Unpacking ${chalk.cyan(PATH.basename(path))}`);
         if (wine) {
             path = `Z:${path}`;
             outpath = `Z:${outpath}`;
         }
-        console.log(`unpacking ${path}`);
-        fs.appendFileSync(config.logs, `Unpacking ${path}\n`)
+        fs.appendFileSync(config.logs, `Unpacking ${path}\n\n`)
         child.exec(config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath))
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs);
@@ -637,13 +635,27 @@ function writeConfig(c) {
                     console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
                     exitHandler();
                 } else if (d.includes(`LogPakFile: Display: Extracted `)) {
-                    console.log(`Extracted ${chalk.cyan(PATH.basename(path))}`);
+                    console.log(`Unpacked.`);
                     exitHandler();
                 }
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
+
+    module.exports.jsonify = jsonify = function jsonify(file) {
+        const { Extractor } = require('node-wick');
+
+        // Make a new Extractor by specifying the file path (minus the extension), and the AES encryption key as a hexadecimal string.
+        let extractor = new Extractor("pakchunk", "");
+
+        // Iterate over all the files in the ucas, and extract them.
+        // get_file_list returns an array of file paths within the ucas. You will need the index in the array to extract the files.
+        extractor.get_file_list().forEach((v, idx) => {
+            // get_file(path) returns a NodeJS Buffer with the decrypted file contents.
+            fs.writeFileSync(idx + ".uasset", extractor.get_file(v));
+        });
+    }
 
     // idk fs.access just false all the time.
     /*if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
@@ -733,6 +745,7 @@ function writeConfig(c) {
                             var log = x
                                 .split(`[  0]`)[1] // after timestamp
                                 .replace(/LogInit: Display: /g, ``)
+                                .replace(/LogProperty: Error: /g,``)
                                 .replace(/ Error: /g, ``)
                                 //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
                                 .replace(/FStructProperty::Serialize Loading: Property /g, ``)
