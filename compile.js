@@ -6,6 +6,7 @@ const https = require(`https`);
 const os = require(`os`);
 const chalk = require(`chalk`);
 const zl = require("zip-lib");
+var crypto = require('crypto');
 
 function formatTime(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
@@ -78,30 +79,40 @@ function findModVersion() {
     if (!raw) return `unVersioned`;
     return raw;
 }
-
-module.exports.upload = async function uploadMod(zip) {
+var utcNow = new Date(new Date().toUTCString());
+module.exports.uploadMod = uploadMod = async function uploadMod(
+    zip,
+    active = false,
+    version = config.modio.dateVersion ? `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth()}.${utcNow.getUTCDate()}` : findModVersion(),
+    changelog = `Uploaded: ${utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, '')} UTC`,
+) {
     return new Promise(async (r, re) => {
-        const d = new Date();
-        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, {
+        if (fs.statSync(zip).size > 5368709120) return console.log(`Zip bigger then 5gb`);
+        var body = {
+            filedata: `@${zip}`,
+            //filedata: fs.readFileSync(zip, `binary`),
+            //filehash: crypto.createHash('md5').update(fs.readFileSync(zip, `binary`)).digest('hex'),
+            version: version,
+            //active: active,
+            changelog: changelog
+        };
+        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
             method: 'post',
             headers: {
                 'Authorization': `Bearer ${config.modio.token}`,
-                'Content-Type': `multipart/form-data`,
-                'Accept': `application/json`,
+                'Content-Type': 'multipart/form-data',
+                'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                filedata: fs.readFileSync(zip, `binary`),
-                version: config.modioid.dateVersion ? `${d.getUTCFullYear()}.${d.getUTCMonth()}.${d.getUTCDate()}` : findModVersion(),
-                active: true,
-                changelog: changelog
-            }),
+            body: JSON.stringify(body),
         });
+        console.log(body);
+        console.log(await res.json());
         if (res.status == 201)
             r(true);
         else r(res);
     })
 };
-module.exports.upload = async function deleteModFile(id) {
+module.exports.deleteModFile = deleteModFile = async function deleteModFile(id) {
     return new Promise(async (r, re) => {
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
             method: 'delete',
@@ -378,8 +389,9 @@ function writeConfig(c) {
             var logged = false;
             function logConf() {
                 if (!logged) {
-                    var log = `${`${x}:`.padEnd(maxConfigKeyLenght + 3)}${coloredVal}`;
-                    console.log(log.padStart(log.length + depth * 3));
+                    const redactList = [`token`];
+                    var log = `${`${x}:`.padEnd(maxConfigKeyLenght + 2)}${redactList.includes(x) && coloredVal && coloredVal.length > 10 ? `[REDACTED]` : coloredVal}`;
+                    console.log(log.padStart(log.length + depth));
                 }
                 logged = true;
             }
@@ -390,7 +402,7 @@ function writeConfig(c) {
                         logConf()
                     } else {
                         logConf();
-                        logConfig(config[x], depth + 1);
+                        logConfig(config[x], depth + x.length);
                     }
                     break;
                 case `boolean`:
@@ -421,50 +433,56 @@ function writeConfig(c) {
 
     module.exports.backup = backup = function backup() {
         return new Promise(async r => {
-            console.log(`Making backup...`);
-            if (!fs.existsSync(`${__dirname}/backups`))
-                fs.mkdirSync(`${__dirname}/backups`);
-            if (config.backup.max != -1) {
-                var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
-                    var aid = a.split(` - `)[0];
-                    if (isNaN(aid)) return;
-                    aid = parseInt(aid);
+            try {
+                console.log(`Making backup...`);
+                if (!fs.existsSync(`${__dirname}/backups`))
+                    fs.mkdirSync(`${__dirname}/backups`);
+                if (config.backup.max != -1) {
+                    var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
+                        var aid = a.split(` - `)[0];
+                        if (isNaN(aid)) return;
+                        aid = parseInt(aid);
 
-                    var bid = b.split(` - `)[0];
-                    if (isNaN(bid)) return;
-                    bid = parseInt(bid);
+                        var bid = b.split(` - `)[0];
+                        if (isNaN(bid)) return;
+                        bid = parseInt(bid);
 
-                    if (aid < bid) return -1;
-                    if (aid > bid) return 1;
-                    return 0;
-                }); // oldest => newest
-                backups.forEach((x, i) => {
-                    //if(i == 0) return; // keep oldest as a keepsake
-                    if (backups.length - i - 1 > config.backup.max)
-                        fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                        if (aid < bid) return -1;
+                        if (aid > bid) return 1;
+                        return 0;
+                    }); // oldest => newest
+                    backups.forEach((x, i) => {
+                        //if(i == 0) return; // keep oldest as a keepsake
+                        if (backups.length - i - 1 > config.backup.max)
+                            fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                    });
+                }
+                var id = -1;
+                fs.readdirSync(`${__dirname}/backups`).forEach(x => {
+                    var xid = x.split(` - `)[0];
+                    if (isNaN(xid) && xid != `0`) return console.log(`invalid ${x}`);
+                    xid = parseInt(xid);
+                    if (xid > id)
+                        id = xid;
                 });
+                id++;
+                var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
+                fs.mkdirSync(buf);
+                fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
+                if (config.backup.pak)
+                    fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
+                if (config.zip.backups) {
+                    await zl.archiveFolder(buf, `${buf}.zip`);
+                    fs.rmSync(buf, { recursive: true, force: true })
+                }
+                if (config.backup.blacklist.length != 0) searchDir(buf, config.backup.blacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
+                console.log(`Backup done! id: ${chalk.cyan(id)}`);
+                r();
+            } catch (error) {
+                console.log(error);
+                console.log(`Retrying backup...`);
+                r(await backup());
             }
-            var id = -1;
-            fs.readdirSync(`${__dirname}/backups`).forEach(x => {
-                var xid = x.split(` - `)[0];
-                if (isNaN(xid) && xid != `0`) return console.log(`invalid ${x}`);
-                xid = parseInt(xid);
-                if (xid > id)
-                    id = xid;
-            });
-            id++;
-            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
-            fs.mkdirSync(buf);
-            fs.copySync(`${__dirname}/../Content/${config.ModName}`, `${buf}/${config.ModName}`);
-            if (config.backup.pak)
-                fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
-            if (config.zip.backups) {
-                await zl.archiveFolder(buf, `${buf}.zip`);
-                fs.rmSync(buf, { recursive: true, force: true })
-            }
-            if (config.backup.blacklist.length != 0) searchDir(buf, config.backup.blacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
-            console.log(`Backup done! id: ${chalk.cyan(id)}`);
-            r();
         })
     }
 
@@ -545,6 +563,25 @@ function writeConfig(c) {
     //return child.exec(`wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', console.log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
 
+    async function publish() {
+        return new Promise(async r => {
+            console.log(`Publising...`);
+            var madeZip = false;
+            if (!fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)) {
+                await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
+                madeZip = true;
+            }
+            var res = await uploadMod(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, true);
+            if (res != true)
+                console.log(`Failed ${res.status}: ${res.statusText}`);
+            else console.log(`Published!`);
+            if (madeZip) fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
+            r();
+        })
+    }
+    if (process.argv.includes(`-onlypublish`))
+        return await publish();
+
     function pack() {
         console.log(`packing ${config.ModName}...`);
         fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n\n`);
@@ -577,15 +614,7 @@ function writeConfig(c) {
                     );
                 }
 
-                if (process.argv.includes(`-publish`) || config.modio.onCompile) {
-                    var madeZip = false;
-                    if (!fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)) {
-                        await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
-                        madeZip = true;
-                    }
-                    uploadMod(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
-                    if (madeZip) fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
-                }
+                if (process.argv.includes(`-publish`) || config.modio.onCompile) publish();
                 /*if(config.modio.deleteOther){
                     var files = await getFiles();
                     files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
@@ -745,7 +774,7 @@ function writeConfig(c) {
                             var log = x
                                 .split(`[  0]`)[1] // after timestamp
                                 .replace(/LogInit: Display: /g, ``)
-                                .replace(/LogProperty: Error: /g,``)
+                                .replace(/LogProperty: Error: /g, ``)
                                 .replace(/ Error: /g, ``)
                                 //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
                                 .replace(/FStructProperty::Serialize Loading: Property /g, ``)
