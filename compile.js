@@ -8,12 +8,14 @@ const chalk = require(`chalk`);
 const zl = require("zip-lib");
 var crypto = require('crypto');
 
+const startTime = new Date();
+
 function formatTime(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
     var months = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7 * 31)));
     var weeks = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7)));
     var days = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24)));
-    var hours = Math.abs(Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))) - 3; // fuck if I know why it needs -3h
+    var hours = Math.abs(Math.floor((time % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
     var minutes = Math.abs(Math.floor((time % (1000 * 60 * 60)) / (1000 * 60)));
     var seconds = Math.abs(Math.floor((time % (1000 * 60)) / 1000));
     var t = ``;
@@ -645,7 +647,7 @@ function writeConfig(c) {
                         }));
                 }*/
 
-                console.log(`Done!`);
+                console.log(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
@@ -776,6 +778,7 @@ function writeConfig(c) {
                                 .replace(/LogInit: Display: /g, ``)
                                 .replace(/LogProperty: Error: /g, ``)
                                 .replace(/ Error: /g, ``)
+                                .replace(new RegExp(W__dirname.replace(`/compiler/`, ``), 'g'), ``)
                                 //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
                                 .replace(/FStructProperty::Serialize Loading: Property /g, ``)
                                 .replace(/StructProperty /g, ``)
