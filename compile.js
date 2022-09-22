@@ -674,7 +674,7 @@ function writeConfig(c) {
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
 
-    module.exports.jsonify = jsonify = function jsonify(file) {
+    /*module.exports.jsonify = jsonify = function jsonify(file) {
         const { Extractor } = require('node-wick');
 
         // Make a new Extractor by specifying the file path (minus the extension), and the AES encryption key as a hexadecimal string.
@@ -686,7 +686,7 @@ function writeConfig(c) {
             // get_file(path) returns a NodeJS Buffer with the decrypted file contents.
             fs.writeFileSync(idx + ".uasset", extractor.get_file(v));
         });
-    }
+    }*/
 
     // idk fs.access just false all the time.
     /*if (fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`) && !fs.accessSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`, fs.constants.W_OK | fs.constants.R_OK)) {
@@ -792,7 +792,8 @@ function writeConfig(c) {
                                 .replace(/:/g, ` > `)
                                 .replace(/'/g, ``)
                                 .replace(/_/g, ` `)
-                                .replace(`. `, ` | ERR: `);
+                                .replace(`. `, ` | ERR: `)
+                                .trim();
                             log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
                             //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
                             while (log.split(` `).find(x => x.includes(`.`))) {
