@@ -371,12 +371,33 @@ function writeConfig(c) {
     process.on('SIGUSR2', exitHandler);
     //catches uncaught exceptions
     process.on('uncaughtException', exitHandler);
+    fs.writeFileSync(config.logs, ``);
 
     // unpack from argument
     var unpackFile = process.argv.find(x => x.includes(`.pak`));
-    if (unpackFile) return unpack(unpackFile);
 
-    fs.writeFileSync(config.logs, ``);
+    module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
+        console.log(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`,``))}`);
+        if (wine) {
+            path = `Z:${path}`;
+            //outpath = `Z:${outpath}`;
+        }
+        fs.appendFileSync(config.logs, `Unpacking ${path}\n\n`)
+        child.exec(config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath))
+            .on('exit', async () => {
+                var d = fs.readFileSync(config.logs);
+                if (d.includes(`LogPakFile: Error: Failed to load `)) {
+                    console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                    exitHandler();
+                } else if (d.includes(`LogPakFile: Display: Extracted `)) {
+                    console.log(`Unpacked.`);
+                    exitHandler();
+                }
+            })
+            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+    }
+
+    if (unpackFile) return unpack(unpackFile);
 
     logConfig(config);
     function logConfig(config = config, depth = 0) {
@@ -648,27 +669,6 @@ function writeConfig(c) {
                 }*/
 
                 console.log(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
-            })
-            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
-    }
-
-    module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
-        console.log(`Unpacking ${chalk.cyan(PATH.basename(path))}`);
-        if (wine) {
-            path = `Z:${path}`;
-            outpath = `Z:${outpath}`;
-        }
-        fs.appendFileSync(config.logs, `Unpacking ${path}\n\n`)
-        child.exec(config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath))
-            .on('exit', async () => {
-                var d = fs.readFileSync(config.logs);
-                if (d.includes(`LogPakFile: Error: Failed to load `)) {
-                    console.log(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
-                    exitHandler();
-                } else if (d.includes(`LogPakFile: Display: Extracted `)) {
-                    console.log(`Unpacked.`);
-                    exitHandler();
-                }
             })
             .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
     }
