@@ -522,7 +522,7 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
     }
 
     module.exports.loadbackup = loadbackup = async function loadbackup(id) {
-        if (!id) {
+        if (!id)
             if (!fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`))
                 console.log(`Missing id.`)
             else {
@@ -533,7 +533,6 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
                 console.log(`Unloaded backup.`);
                 return;
             }
-        }
         if (!isNaN(id) && !Number.isInteger(parseInt(id))) return console.log(`Invalid id. ${id}`); // custom ids would be nice
         var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
         if (!backuppath) return console.log(`Invalid backup id!`);
@@ -550,7 +549,7 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
         if (folder.endsWith(`.zip`))
             await zl.extract(backuppath, `${__dirname}/../Content/${config.ModName}`);
         else {
-            if (!fs.existsSync(`${__dirname}/backups/${backuppath}/${config.ModName}`)) return console.log(`Backup dosent include mod folder.\n${fs.readdirSync(`${__dirname}/backups/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`);
+            if (!fs.existsSync(`${__dirname}/backups/${backuppath}/${config.ModName}`)) return console.log(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${__dirname}/backups/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`);
             fs.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${__dirname}/../Content/${config.ModName}`);
         }
         refreshDirsToNeverCook();
@@ -625,9 +624,9 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
             return 0;
         });
         backuppath.forEach(x => {
-            console.log(`${x.split(` - `)[0]} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1]))}`);
+            console.log(`${chalk.cyan(x.split(` - `)[0])} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`);
         });
-        console.log(`\nBackups: ${backuppath.length}`);
+        console.log(`\nBackups: ${chalk.cyan(backuppath.length)}`);
         exitHandler()
         return;
     }
