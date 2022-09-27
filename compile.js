@@ -189,7 +189,7 @@ var config = {
     },
 };
 
-var platformPaths = {
+const originalplatformPaths = {
     win: {
         UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
         SteamInstall: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
@@ -226,6 +226,7 @@ var platformPaths = {
         UnPackingCmd: `no idea`,
     },
 };
+const platformPaths = JSON.parse(JSON.stringify(originalplatformPaths)); // new instance, no longer a refrence
 
 const configPath = `${__dirname}/config.json`;
 const forceNew = false;
@@ -251,15 +252,14 @@ if (fs.existsSync(configPath) && !forceNew) {
     }
 }
 
-writeConfig(config);
+const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
+if (tempModName) config.ModName = tempModName;
+
 function writeConfig(c) {
     fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
 }
 
-const originalplatformPaths = platformPaths;
-
-updateConfigVariables();
-function updateConfigVariables() {
+function updatePlatPathVariables() {
     Object.keys(originalplatformPaths).forEach(plat =>
         Object.keys(originalplatformPaths[plat]).forEach(x =>
             platformPaths[plat][x] = originalplatformPaths[plat][x]
@@ -271,28 +271,38 @@ function updateConfigVariables() {
     );
 }
 
+var unVaredConfig = JSON.parse(JSON.stringify(config));
+
+updatePlatPathVariables();
 const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-var paths = platformPaths[`${os.platform().replace(`32`, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`];
+const platform = `${os.platform().replace(/[3264]/, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
+var paths = platformPaths[platform];
 if (!paths) paths = platformPaths.givenUpos;
+updatePlatPathVariables();
 
 Object.keys(paths).forEach(key => {
-    if (!config[key])
-        config[key] = paths[key]
+    if (!config[key]) {
+        unVaredConfig[key] = originalplatformPaths[platform][key];
+        config[key] = paths[key];
+    }
+});
+writeConfig(unVaredConfig);
+Object.keys(paths).forEach(x => {
+    if (typeof config[x] == `string`)
+        config[x] = config[x]
+            .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
+            //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
+            .replace(/{me}/g, username)
+            .replace(/{mod}/g, config.ModName)
 });
 
 module.exports.config = config;
 
-const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
-if (tempModName) {
-    config.ModName = tempModName;
-    updateConfigVariables();
-}
-
 // config ready, verify
 if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && !process.argv.find(x => x.includes(`-lbu`))) return console.log(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
 if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return console.log(`Couldnt find project file`);
-if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4`);
-if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg`);
+if (!fs.existsSync(config.UnrealEngine)) return console.log(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
+if (!fs.existsSync(config.SteamInstall)) return console.log(`Couldnt find drg\nPath: ${config.SteamInstall}`);
 
 if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log(`Couldnt find Config/DefaultGame.ini`);
 
@@ -679,6 +689,11 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
                 }
                 fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                 fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
+                if (!fs.existsSync(`${__dirname}/temp/${config.ModName}.pak`)) {
+                    var wrongCook = fs.readdirSync(`${__dirname}/temp/`).find(x => x.endsWith(`.pak`));
+                    console.log(`Failed to cook correct project :)\nYour command:\n${config.PackingCmd.replace(wrongCook, chalk.red(wrongCook))}`);
+                    exitHandler();
+                }
                 fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
                 console.log(`Packed!`);
 
