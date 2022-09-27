@@ -252,9 +252,6 @@ if (fs.existsSync(configPath) && !forceNew) {
     }
 }
 
-const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
-if (tempModName) config.ModName = tempModName;
-
 function writeConfig(c) {
     fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
 }
@@ -287,6 +284,8 @@ Object.keys(paths).forEach(key => {
     }
 });
 writeConfig(unVaredConfig);
+const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
+if (tempModName) config.ModName = tempModName;
 Object.keys(paths).forEach(x => {
     if (typeof config[x] == `string`)
         config[x] = config[x]
