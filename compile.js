@@ -8,7 +8,7 @@ const chalk = require(`chalk`);
 const zl = require("zip-lib");
 var crypto = require('crypto');
 
-function consolelog(log=``,urgent = false) {
+function consolelog(log = ``, urgent = false) {
     if (!module.parent || urgent) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
@@ -114,14 +114,15 @@ var config = {
     logs: "./logs.txt", // empty for no logs
     startDRG: false,
     killDRG: true,
+    logConfig: false,
     backup: {
         onCompile: true,
-        max: -1,
+        max: 5, // -1 for infinite
         pak: false,
         blacklist: [`.git`],
     },
     zip: {
-        onCompile: true, // placed where the .pak folder is
+        onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
         to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
@@ -191,7 +192,7 @@ if (fs.existsSync(configPath) && !forceNew) {
             if (typeof base[x] == `object`)
                 base[x] = checkConfig(base[x], check[x]);
             else
-                if (check[x] && typeof base[x] == typeof check[x])
+                if (check[x] != undefined && typeof base[x] == typeof check[x])
                     base[x] = check[x];
         });
         return base;
@@ -224,7 +225,7 @@ if (!paths) paths = platformPaths.givenUpos;
 updatePlatPathVariables();
 
 Object.keys(paths).forEach(key => {
-    if (!config[key]) {
+    if (config[key] == undefined || config[key] == ``) {
         unVaredConfig[key] = originalplatformPaths[platform][key];
         config[key] = paths[key];
     }
@@ -645,7 +646,8 @@ if (module.parent) return; // required as a module
 
     if (unpackFile) return unpack(unpackFile);
 
-    logConfig(config);
+    if (config.logConfig)
+        logConfig(config);
     function logConfig(config = config, depth = 0) {
         var maxConfigKeyLenght = 0;
         Object.keys(config).forEach(x => {
