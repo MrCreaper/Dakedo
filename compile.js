@@ -696,7 +696,8 @@ if (module.parent) return; // required as a module
         });
     }
 
-    consolelog();
+    if (config.logConfig)
+        consolelog();
     fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`))
