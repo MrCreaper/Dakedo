@@ -2,6 +2,8 @@
 
 !compile.js
 !package.json
+!umodel
+!umodel.exe
 
 !README.md
 !LICENSE

@@ -12,6 +12,7 @@ Options require a "-" prefix (example: `./compile -drg` will toggle drg config)
 - {pak file} (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
 - unpackdrg (unpacks drg)
 - publish (publishes version to modio)
+- export (uses umodel to export textures, and nothing else)
 
 No "clear backups" command, you clear that on your own. Your tears.
 
@@ -60,6 +61,8 @@ No "clear backups" command, you clear that on your own. Your tears.
 
 ### development
 Build w/[pkg](https://www.npmjs.com/package/pkg)
+
+[umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
 
 Also if you oh so wish, I have exposed some of the functions.
 So you can just do `var compiler = require('./compile.js')` and mess around.

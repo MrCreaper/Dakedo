@@ -740,6 +740,40 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
 
+    function exportTex(out = `./export`) {
+        // "no"'s are added couse otherwise I get a buffer overflow
+        const cmd = `./umodel`;
+        const args = [
+            `-export`,
+            `*.uasset`,
+            `-path="${config.SteamInstall}/FSD/Content/Paks/"`,
+            `-out="${out}"`,
+            `-game=ue4.27`,
+            `-png`,
+            `-nooverwrite`,
+            `-nomesh`,
+            `-noanim`,
+            `-nostat`,
+            `-novert`,
+            `-nomorph`,
+            `-nolightmap`,
+        ];
+        fs.appendFileSync(config.logs, `\n${cmd} ${args.join(` `)}\n`);
+        console.log(`Exporting...`);
+        child.spawn(cmd, args)
+            .on('exit', async () => {
+                var d = fs.readFileSync(config.logs, `utf8`).split(`\n`);
+                var completed = d.find(x => x.includes(`Exported`));
+                if (completed)
+                    console.log(completed);
+                else
+                    console.log(`Failed to export :(`);
+            })
+            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+    }
+    if (process.argv.includes(`-export`)) return exportTex();
+
+
     /*module.exports.jsonify = jsonify = function jsonify(file) {
         const { Extractor } = require('node-wick');
 
