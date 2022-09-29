@@ -9,7 +9,7 @@ const zl = require("zip-lib");
 var crypto = require('crypto');
 
 function consolelog(log = ``, urgent = false) {
-    if (!module.parent || urgent) // stfu if module
+    if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
 }
@@ -242,6 +242,10 @@ Object.keys(paths).forEach(x => {
             .replace(/{mod}/g, config.ModName)
 });
 
+function logFile(log) {
+    fs.appendFileSync(config.logs, log)
+}
+
 // exports
 module.exports.config = config;
 
@@ -355,7 +359,7 @@ module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
         //outpath = `Z:${outpath}`;
     }
     const cmd = config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath);
-    fs.appendFileSync(config.logs, `Unpacking ${path}\n${cmd}\n\n`)
+    logFile(`Unpacking ${path}\n${cmd}\n\n`)
     child.exec(cmd)
         .on('exit', async () => {
             var d = fs.readFileSync(config.logs);
@@ -367,7 +371,7 @@ module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
                 exitHandler();
             }
         })
-        .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+        .stdout.on('data', (d) => logFile(String(d)));
 }
 
 
@@ -476,13 +480,13 @@ module.exports.loadbackup = loadbackup = async function loadbackup(id) {
     consolelog(`Backup loaded!`);
 }
 
-module.exports.exportTex = exportTex = (out = `./export/`, flatPath = ``) => {
+module.exports.exportTex = exportTex = (pakFolder = `${config.SteamInstall}/FSD/Content/Paks/`, out = `./export/`, flatPath = ``) => {
     // "no"'s are added couse otherwise I get a buffer overflow
     const cmd = `./umodel${platform == `win` ? `.exe` : ``}`;
     const args = [
         `-export`,
         `*.uasset`,
-        `-path="${config.SteamInstall}/FSD/Content/Paks/"`,
+        `-path="${pakFolder}"`,
         `-out="${out}"`,
         `-game=ue4.27`,
         `-png`,
@@ -495,7 +499,7 @@ module.exports.exportTex = exportTex = (out = `./export/`, flatPath = ``) => {
         `-nolightmap`,
     ];
     fs.mkdirsSync(out);
-    fs.appendFileSync(config.logs, `\n${cmd} ${args.join(` `)}\n`);
+    logFile(`\n${cmd} ${args.join(` `)}\n`);
     consolelog(`Exporting...`);
     child.spawn(cmd, args)
         .on('exit', async () => {
@@ -531,12 +535,12 @@ module.exports.exportTex = exportTex = (out = `./export/`, flatPath = ``) => {
                             else if (!x.includes('.')) read(`${temppath}${x}/`);
                         });
                     }
-                    consolelog(`Flattened ${i} files with ${Object.keys(copies)} copies`);
+                    consolelog(`Flattened ${i} files with ${Object.keys(copies).length} copies`);
                 }
             } else
                 consolelog(`Failed to export :(`);
         })
-        .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+        .stdout.on('data', (d) => logFile(String(d)));
 }
 
 // config ready, verify
@@ -547,6 +551,26 @@ if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPa
 
 if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return consolelog(`Couldnt find Config/DefaultGame.ini`);
 
+var cookingChild;
+var updateCompleted = false;
+async function exitHandler(err, skip = false) {
+    if (fs.existsSync(`${__dirname}/temp/`) && process.pkg) fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
+    //if (!updateCompleted && fs.existsSync(`${__dirname}/compile`)) fs.rmSync(`${__dirname}/compile`);
+    if (cookingChild) cookingChild.destroy();
+    if (err && err != `SIGINT`) console.log(err);
+    if (process.pkg) await keypress();
+    process.exit();
+}
+process.on('exit', exitHandler);
+//catches ctrl+c event
+process.on('SIGINT', exitHandler);
+// catches "kill pid" (for example: nodemon restart)
+process.on('SIGUSR1', exitHandler);
+process.on('SIGUSR2', exitHandler);
+//catches uncaught exceptions
+process.on('uncaughtException', exitHandler);
+fs.writeFileSync(config.logs, ``);
+
 if (module.parent) return; // required as a module
 
 (async () => {
@@ -555,7 +579,6 @@ if (module.parent) return; // required as a module
         return exitHandler();
     }
     __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
-    var updateCompleted = false;
     async function update() {
         const repo = `MrCreaper/drg-linux-modding`;
         if (!repo) return;
@@ -618,28 +641,7 @@ if (module.parent) return; // required as a module
         logsDisabled = true;
     }
 
-    async function exitHandler(err, skip = false) {
-        if (fs.existsSync(`${__dirname}/temp/`) && process.pkg)
-            fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
-        if (!updateCompleted && fs.existsSync(`${__dirname}/compile`))
-            fs.rmSync(`${__dirname}/compile`);
-        if (cookingChild)
-            cookingChild.destroy();
-        if (err && err != `SIGINT`)
-            consolelog(err);
-        if (process.pkg)
-            await keypress();
-        process.exit();
-    }
-    process.on('exit', exitHandler);
-    //catches ctrl+c event
-    process.on('SIGINT', exitHandler);
-    // catches "kill pid" (for example: nodemon restart)
-    process.on('SIGUSR1', exitHandler);
-    process.on('SIGUSR2', exitHandler);
-    //catches uncaught exceptions
-    process.on('uncaughtException', exitHandler);
-    fs.writeFileSync(config.logs, ``);
+    logFile
 
     // unpack from argument
     var unpackFile = process.argv.find(x => x.includes(`.pak`));
@@ -698,7 +700,7 @@ if (module.parent) return; // required as a module
 
     if (config.logConfig)
         consolelog();
-    fs.appendFileSync(config.logs, `${JSON.stringify(config, null, 4)}\n`);
+    logFile(`${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`))
         return backup();
@@ -750,7 +752,7 @@ if (module.parent) return; // required as a module
 
     function pack() {
         consolelog(`packing ${config.ModName}...`);
-        fs.appendFileSync(config.logs, `\npacking ${config.ModName}...\n${config.PackingCmd}\n\n`);
+        logFile(`\npacking ${config.ModName}...\n${config.PackingCmd}\n\n`);
 
         if (fs.existsSync(`${__dirname}/temp/`))
             fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
@@ -801,8 +803,8 @@ if (module.parent) return; // required as a module
                                 consolelog(`Lauched DRG`); // most likely
                                 r();
                             })
-                            .on(`message`, (d) => fs.appendFileSync(config.logs, String(d)))
-                            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)))
+                            .on(`message`, (d) => logFile(String(d)))
+                            .stdout.on('data', (d) => logFile(String(d)))
                     })
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
@@ -817,7 +819,7 @@ if (module.parent) return; // required as a module
 
                 consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
             })
-            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+            .stdout.on('data', (d) => logFile(String(d)));
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
     if (process.argv.includes(`-export`)) return exportTex();
@@ -865,11 +867,10 @@ if (module.parent) return; // required as a module
 
     cook();
 
-    var cookingChild;
     function cook() {
         consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
         refreshDirsToNeverCook();
-        fs.appendFileSync(config.logs, `\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
+        logFile(`\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
         cookingChild = child.exec(config.CookingCmd)
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
@@ -934,6 +935,6 @@ if (module.parent) return; // required as a module
                     exitHandler();
                 }
             })
-            .stdout.on('data', (d) => fs.appendFileSync(config.logs, String(d)));
+            .stdout.on('data', (d) => logFile(String(d)));
     }
 })();
