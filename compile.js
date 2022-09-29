@@ -742,7 +742,7 @@ if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return console.log
 
     function exportTex(out = `./export`) {
         // "no"'s are added couse otherwise I get a buffer overflow
-        const cmd = `./umodel`;
+        const cmd = `./umodel${platform == `win` ? `.exe` : ``}`;
         const args = [
             `-export`,
             `*.uasset`,
