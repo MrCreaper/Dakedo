@@ -817,7 +817,7 @@ if (module.parent) return; // required as a module
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
     if (process.argv.includes(`-export`)) return exportTex();
-    if (process.argv.includes(`-exportFlat`)) return exportTex(undefined, undefined, true);
+    if (process.argv.includes(`-exportFlat`)) return exportTex(undefined, undefined, `./flat/`);
 
 
     /*module.exports.jsonify = jsonify = function jsonify(file) {
