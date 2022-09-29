@@ -878,7 +878,6 @@ if (module.parent) return; // required as a module
                     consolelog(`Cooked!`);
                     pack();
                 } else if (d.includes(`LogInit: Display: Failure - `)) {
-                    var errsFound = false;
                     var errs = 0;
                     var errorsLogs = ``;
                     d.split(`\n`).forEach(x => {
@@ -923,12 +922,12 @@ if (module.parent) return; // required as a module
                     });
                     consolelog(`Errors ${errs}:\n\n${errorsLogs}`);
                     if (logsDisabled) {
-                        consolelog(`Failed. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
+                        consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                         fs.renameSync(config.logs, `${__dirname}/logs.txt`);
                         exitHandler();
                         return;
                     }
-                    consolelog(`${errsFound ? `\n` : ``}Failed. Check the logs${errsFound ? ` (or check the above)` : ``} and fix your damn "code"`);
+                    consolelog(`${errs != 0 ? `\n` : ``}${chalk.red(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
                     exitHandler();
                 } else {
                     consolelog(`What the fuck did you do.`);
