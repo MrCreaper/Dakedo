@@ -592,7 +592,6 @@ async function update() {
                     .on(`finish`, () => {
                         file.close();
                         fs.chmodSync(filePath, 0777)
-                        updateCompleted = true;
                         consolelog(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
                         child.spawn(process.argv[0], process.argv.slice(1), {
                             stdio: 'inherit',
@@ -642,11 +641,12 @@ if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPa
 if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return consolelog(`Couldnt find Config/DefaultGame.ini`);
 
 var children = [];
-var updateCompleted = false;
 async function exitHandler(err) {
     if (fs.existsSync(`${__dirname}/temp/`) && process.pkg) fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
-    //if (!updateCompleted && fs.existsSync(`${__dirname}/compile`)) fs.rmSync(`${__dirname}/compile`);
-    children.forEach(x => x.kill());
+    children.forEach(x => {
+        x.destroy();
+        children.splice(children.findIndex(x => x == x), 1);
+    });
     if (err && err != `SIGINT`) console.log(err);
     if (process.pkg) await keypress();
     process.exit();
@@ -771,7 +771,14 @@ if (module.parent) return; // required as a module
                 case `return`:
                     if (selectedOption && selectedOption.run) {
                         consolelog(`Running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
-                        selectedOption.run();
+                        logHistory = [];
+                        var run = selectedOption.run();
+                        if (String(run) == `[object Promise]`) {
+                            selectedOption.running = true;
+                            run.then(() =>
+                                selectedOption.running = false
+                            );
+                        }
                     } else consolelog(`No run command for ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
                     break;
                 case `q`:
@@ -801,12 +808,28 @@ if (module.parent) return; // required as a module
             // bg logs
             logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0)).forEach((x, i) => {
                 process.stdout.cursorTo(0, /*process.stdout.rows - 2 - */i);
+                switch (typeof x) {
+                    case `object`:
+                        x = JSON.stringify(x);
+                        break;
+                    case `function`:
+                        x = `Function: ${x.name}`;
+                        break;
+                }
                 process.stdout.write(x);
             });
 
             // options
             options.forEach((x, i) => {
                 var name = x.name;
+                switch (name) {
+                    case `cook`:
+                    case `publish`:
+                    case `backup`:
+                        if (x.running) name += `ing`;
+                        if (x.running == false) name += `ed`;
+                        break;
+                }
                 var nameNC = removeColor(dyn(name))
                 var nameC = name.replace(name, chalk.hex(dyn(x.color))(name));
                 var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
@@ -958,63 +981,66 @@ if (module.parent) return; // required as a module
         return await publish();
 
     function pack() {
-        consolelog(`packing ${config.ModName}...`);
-        logFile(`\npacking ${config.ModName}...\n${config.PackingCmd}\n\n`);
+        return new Promise(r => {
+            consolelog(`packing ${config.ModName}...`);
+            logFile(`\npacking ${config.ModName}...\n${config.PackingCmd}\n\n`);
 
-        if (fs.existsSync(`${__dirname}/temp/`))
-            fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
-        fs.mkdirSync(`${__dirname}/temp/`);
-        fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
-        if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return consolelog(`Cook didnt cook anything :|`);
-        fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
-        fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
+            if (fs.existsSync(`${__dirname}/temp/`))
+                fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
+            fs.mkdirSync(`${__dirname}/temp/`);
+            fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
+            if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return consolelog(`Cook didnt cook anything :|`);
+            fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
+            fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-        var ch = child.exec(config.PackingCmd)
-            .on('exit', async () => {
-                var d = fs.readFileSync(config.logs);
-                if (d.includes(`LogPakFile: Error: Failed to load `)) {
-                    consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
-                    exitHandler();
-                }
-                fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
-                fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
-                if (!fs.existsSync(`${__dirname}/temp/${config.ModName}.pak`)) {
-                    var wrongCook = fs.readdirSync(`${__dirname}/temp/`).find(x => x.endsWith(`.pak`));
-                    consolelog(`Failed to cook correct project :)\nYour command:\n${config.PackingCmd.replace(wrongCook, chalk.red(wrongCook))}`);
-                    exitHandler();
-                }
-                fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
-                consolelog(`Packed!`);
+            var ch = child.exec(config.PackingCmd)
+                .on('exit', async () => {
+                    var d = fs.readFileSync(config.logs);
+                    if (d.includes(`LogPakFile: Error: Failed to load `)) {
+                        consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                        return r();
+                    }
+                    fs.rmSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
+                    fs.mkdirSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}`);
+                    if (!fs.existsSync(`${__dirname}/temp/${config.ModName}.pak`)) {
+                        var wrongCook = fs.readdirSync(`${__dirname}/temp/`).find(x => x.endsWith(`.pak`));
+                        consolelog(`Failed to cook correct project :)\nYour command:\n${config.PackingCmd.replace(wrongCook, chalk.red(wrongCook))}`);
+                        return r();
+                    }
+                    fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
+                    consolelog(`Packed!`);
 
-                if (config.zip.onCompile) {
-                    await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)
-                    config.zip.to.forEach(dir =>
-                        fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
-                    );
-                }
+                    if (config.zip.onCompile) {
+                        await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`)
+                        config.zip.to.forEach(dir =>
+                            fs.copySync(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
+                        );
+                    }
 
-                if (process.argv.includes(`-publish`) || config.modio.onCompile) publish();
-                /*if(config.modio.deleteOther){
-                    var files = await getFiles();
-                    files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
-                }*/
-                if (config.backup.onCompile) await backup();
-                if (config.startDRG) await startDrg();
+                    if (process.argv.includes(`-publish`) || config.modio.onCompile) publish();
+                    /*if(config.modio.deleteOther){
+                        var files = await getFiles();
+                        files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
+                    }*/
+                    if (config.backup.onCompile) await backup();
+                    if (config.startDRG) await startDrg();
 
-                // clear swap, can couse crashes couse it just piles up after compiles for some reason?
-                /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
-                    consolelog(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
-                    await new Promise(r =>
-                        child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
-                            consolelog(`Swap cleared.`);
-                            r();
-                        }));
-                }*/
+                    // clear swap, can couse crashes couse it just piles up after compiles for some reason?
+                    /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
+                        consolelog(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
+                        await new Promise(r =>
+                            child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
+                                consolelog(`Swap cleared.`);
+                                r();
+                            }));
+                    }*/
 
-                consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
-            })
-            .stdout.on('data', (d) => logFile(String(d)));
-        children.push(ch);
+                    consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
+                    r();
+                })
+                .stdout.on('data', (d) => logFile(String(d)));
+            children.push(ch);
+        });
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
     if (process.argv.includes(`-export`)) return exportTex();
@@ -1054,73 +1080,75 @@ if (module.parent) return; // required as a module
 
     cook();
     function cook() {
-        consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
-        refreshDirsToNeverCook();
-        logFile(`\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
-        var ch = child.exec(config.CookingCmd)
-            .on('exit', async () => {
-                var d = fs.readFileSync(config.logs, `utf8`);
-                if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
-                    consolelog(`Cooked!`);
-                    pack();
-                } else if (d.includes(`LogInit: Display: Failure - `)) {
-                    var errs = 0;
-                    var errorsLogs = ``;
-                    d.split(`\n`).forEach(x => {
-                        if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
-                        errs++;
-                        try {
-                            var log = x
-                                .split(`[  0]`)[1] // after timestamp
-                                .replace(/LogInit: Display: /g, ``)
-                                .replace(/LogProperty: Error: /g, ``)
-                                .replace(/ Error: /g, ``)
-                                .replace(new RegExp(`Z:`, 'g'), ``)
-                                .replace(new RegExp(W__dirname.replace(`/compiler/`, ``).replace(`\\compiler\\`, ``), 'g'), ``)
-                                //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
-                                .replace(/FStructProperty::Serialize Loading: Property /g, ``)
-                                .replace(/StructProperty /g, ``)
-                                .replace(/\/Game/g, ``) // file path start
-                                .replace(/_C:/g, ` > `) // after file
-                                .replace(/:CallFunc_/g, ` > (function) `)
-                                .replace(/ExecuteUbergraph_/g, ` > (graph) `)
-                                .replace(/\[AssetLog\]/g, ``)
-                                .replace(/\\/g, `/`)
-                                .replace(/>  >/g, `>`)
-                                .replace(/:/g, ` > `)
-                                .replace(/'/g, ``)
-                                .replace(/_/g, ` `)
-                                .replace(`. `, ` | ERR: `)
-                                .trim()
-                                .replace(/  /g, ` `).replace(/  /g, ` `)
-                                .replace(/LogBlueprint/g, `BP`)
-                            log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
-                            //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
-                            while (log.split(` `).find(x => x.includes(`.`))) {
-                                log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+        return new Promise(r => {
+            consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
+            refreshDirsToNeverCook();
+            logFile(`\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
+            var ch = child.exec(config.CookingCmd)
+                .on('exit', async () => {
+                    var d = fs.readFileSync(config.logs, `utf8`);
+                    if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
+                        consolelog(`Cooked!`);
+                        await pack();
+                        r();
+                    } else if (d.includes(`LogInit: Display: Failure - `)) {
+                        var errs = 0;
+                        var errorsLogs = ``;
+                        d.split(`\n`).forEach(x => {
+                            if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
+                            errs++;
+                            try {
+                                var log = x
+                                    .split(`[  0]`)[1] // after timestamp
+                                    .replace(/LogInit: Display: /g, ``)
+                                    .replace(/LogProperty: Error: /g, ``)
+                                    .replace(/ Error: /g, ``)
+                                    .replace(new RegExp(`Z:`, 'g'), ``)
+                                    .replace(new RegExp(W__dirname.replace(`/compiler/`, ``).replace(`\\compiler\\`, ``), 'g'), ``)
+                                    //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
+                                    .replace(/FStructProperty::Serialize Loading: Property /g, ``)
+                                    .replace(/StructProperty /g, ``)
+                                    .replace(/\/Game/g, ``) // file path start
+                                    .replace(/_C:/g, ` > `) // after file
+                                    .replace(/:CallFunc_/g, ` > (function) `)
+                                    .replace(/ExecuteUbergraph_/g, ` > (graph) `)
+                                    .replace(/\[AssetLog\]/g, ``)
+                                    .replace(/\\/g, `/`)
+                                    .replace(/>  >/g, `>`)
+                                    .replace(/:/g, ` > `)
+                                    .replace(/'/g, ``)
+                                    .replace(/_/g, ` `)
+                                    .replace(`. `, ` | ERR: `)
+                                    .trim()
+                                    .replace(/  /g, ` `).replace(/  /g, ` `)
+                                    .replace(/LogBlueprint/g, `BP`)
+                                log = log.replace(`.${log.split(` `)[0].split(`.`)[1]}`, ``) // weird file.file thing
+                                //.replace(/./g, ``) // for some reason it removes the first '/' in the path?
+                                while (log.split(` `).find(x => x.includes(`.`))) {
+                                    log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
+                                }
+                                errorsLogs += `${log}\n`;
+                            } catch (err) {
+                                consolelog(`BEAUTY ERROR: ${x}`);
+                                consolelog(err);
+                                errorsLogs += `${x}\n`;
                             }
-                            errorsLogs += `${log}\n`;
-                        } catch (err) {
-                            consolelog(`BEAUTY ERROR: ${x}`);
-                            consolelog(err);
-                            errorsLogs += `${x}\n`;
+                        });
+                        consolelog(`Errors ${errs}:\n\n${errorsLogs}`);
+                        if (logsDisabled) {
+                            consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
+                            fs.renameSync(config.logs, `${__dirname}/logs.txt`);
+                            return r();
                         }
-                    });
-                    consolelog(`Errors ${errs}:\n\n${errorsLogs}`);
-                    if (logsDisabled) {
-                        consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
-                        fs.renameSync(config.logs, `${__dirname}/logs.txt`);
-                        exitHandler();
-                        return;
+                        consolelog(`${errs != 0 ? `\n` : ``}${chalk.red(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
+                        return r();
+                    } else {
+                        consolelog(`What the fuck did you do.`);
+                        return r();
                     }
-                    consolelog(`${errs != 0 ? `\n` : ``}${chalk.red(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
-                    exitHandler();
-                } else {
-                    consolelog(`What the fuck did you do.`);
-                    exitHandler();
-                }
-            })
-            .stdout.on('data', (d) => logFile(String(d)));
-        children.push(ch);
+                })
+                .stdout.on('data', (d) => logFile(String(d)));
+            children.push(ch);
+        });
     }
 })();
