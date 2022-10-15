@@ -6,7 +6,7 @@
   "scripts": {
     "verify": "node . -verify",
     "publish": "node . -publish",
-    "pkg": "pkg compile.js && ./compile-linux"
+    "pkg": "pkg compile.js --no-warnings --compress Brotli && ./compile-linux"
   },
   "repository": {
     "type": "git",
