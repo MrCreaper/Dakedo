@@ -709,11 +709,11 @@ if (module.parent) return; // required as a module
                         color: `#00FFFF`,
                         run: () => {
                             selectedOptions = options;
-                            selected = 3;
+                            selected = selectedOptions.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == `list backups`);
                         },
                     },
                 ];
-                var backuppath = fs.readdirSync(`${__dirname}/backups`)
+                var backuppath = fs.readdirSync(`${__dirname}/backups`);
                 if (!backuppath) return consolelog(`Invalid backup id!`);
                 backuppath.sort(function (a, b) {
                     var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
@@ -731,7 +731,8 @@ if (module.parent) return; // required as a module
                 });
                 selectedOptions = listBackupOptions;
                 selected = 0;
-            }
+            },
+            hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
             name: `drg`,
