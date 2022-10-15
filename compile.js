@@ -7,11 +7,25 @@ const os = require(`os`);
 const chalk = require(`chalk`);
 const zl = require("zip-lib");
 var crypto = require('crypto');
+const readline = require(`readline`);
+const { EventEmitter } = require(`events`);
+class Emitter extends EventEmitter { }
+const consoleloge = new Emitter();
 
+var latestLog = ``;
+var logHistory = [];
 function consolelog(log = ``, urgent = false) {
     if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
+    if (log) {
+        latestLog = log;
+        logHistory.push(log);
+        while (logHistory.length > 100) {
+            logHistory.pop();
+        }
+        consoleloge.emit(`log`, log);
+    }
 }
 
 const startTime = new Date();
@@ -60,7 +74,7 @@ function searchDir(p = ``, search = []) {
             var fp = `${path}/${x}`
             var s = fs.statSync(fp);
             if (s.isDirectory()) queryDir(fp);
-            if (s.isFile() && search.includes(x)) hits.push(fp);
+            if (/*s.isFile() && */search.includes(x)) hits.push(fp);
         });
     }
     return hits;
@@ -115,6 +129,7 @@ var config = {
     startDRG: false,
     killDRG: true,
     logConfig: false,
+    ui: true, // use the ui version by default
     backup: {
         onCompile: true,
         max: 5, // -1 for infinite
@@ -134,6 +149,7 @@ var config = {
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
     },
+    update: true, // automaticlly check for updates
 };
 
 const originalplatformPaths = {
@@ -298,9 +314,9 @@ module.exports.deleteModFile = deleteModFile = async function deleteModFile(id) 
     })
 };
 
-module.exports.upload = async function getFiles() {
+module.exports.getFiles = async function getFiles(gameid = config.modio.gameid, modid = config.modio.modid, token = config.modio.token) {
     return new Promise(async (r, re) => {
-        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files?api_key=${config.modio.token}`, {
+        var res = await fetch(`https://api.mod.io/v1/games/${gameid}/mods/${modid}/files?api_key=${token}`, {
             method: 'get',
             headers: {
                 'Accept': `application/json`,
@@ -419,6 +435,7 @@ module.exports.backup = backup = function backup() {
                 await zl.archiveFolder(buf, `${buf}.zip`);
                 fs.rmSync(buf, { recursive: true, force: true })
             }
+            console.log(searchDir(buf, config.backup.blacklist));
             if (config.backup.blacklist.length != 0) searchDir(buf, config.backup.blacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
             consolelog(`Backup done! id: ${chalk.cyan(id)}`);
             r();
@@ -543,6 +560,74 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.SteamInstall}/FSD/
         .stdout.on('data', (d) => logFile(String(d)));
 }
 
+async function update() {
+    const repo = `MrCreaper/drg-linux-modding`;
+    if (!repo) return;
+    const version = require(`./package.json`).version;
+    return new Promise(async r => {
+        var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        resp = await resp.json();
+        if (resp.message) return r(); //console.log(resp); // usually rate limit error
+        if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease) return r();
+        if (!process.pkg) {
+            r();
+            return consolelog(`Not downloading update for .js version`);
+        }
+        const asset = resp.assets.find(x => x.name.includes(os.platform()));
+        if (!asset) return consolelog(`No compatible update download found.. (${os.platform()})`);
+        consolelog(`Downloading update...`);
+        //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
+        download(asset.browser_download_url,)
+        function download(url) {
+            https.get(url, down => {
+                if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
+                var filePath = `${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`;
+                var file = fs.createWriteStream(filePath);
+                down.pipe(file
+                    .on(`finish`, () => {
+                        file.close();
+                        fs.chmodSync(filePath, 0777)
+                        updateCompleted = true;
+                        consolelog(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
+                        child.spawn(process.argv[0], process.argv.slice(1), {
+                            stdio: 'inherit',
+                        });
+                        //process.exit(); // will make the child proccss "unkillable"
+                        //r(); // wait forever
+                    }))
+            });
+        }
+    });
+}
+
+async function startDrg() {
+    return new Promise(async r => {
+        await killDrg();
+        consolelog(`Launching DRG...`);
+        child.exec(`steam steam://rungameid/548430`)
+            .on(`exit`, () => {
+                consolelog(`Lauched DRG`); // most likely
+                r();
+            })
+            .on(`message`, (d) => logFile(String(d)))
+            .stdout.on('data', (d) => logFile(String(d)))
+    })
+}
+
+async function killDrg() {
+    return new Promise(async r => {
+        var prcList = await find('name', 'FSD');
+        //consolelog(prcList);
+        prcList.forEach(x => {
+            try {
+                if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
+                    process.kill(x.pid);
+            } catch (error) { }
+        })
+        r();
+    })
+}
+
 // config ready, verify
 if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && !process.argv.find(x => x.includes(`-lbu`))) return consolelog(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
 if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
@@ -570,57 +655,137 @@ process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
 fs.writeFileSync(config.logs, ``);
+__dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 
 if (module.parent) return; // required as a module
 
 (async () => {
+
     if (process.getuid() == 0) {
         consolelog(`Refusing to run as root`);
         return exitHandler();
     }
-    __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
-    async function update() {
-        const repo = `MrCreaper/drg-linux-modding`;
-        if (!repo) return;
-        const version = require(`./package.json`).version;
-        return new Promise(async r => {
-            var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
-            resp = await resp.json();
-            if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease)
-                r();
-            else {
-                if (!process.pkg) {
-                    r();
-                    return consolelog(`Not downloading update for .js version`);
-                }
-                const asset = resp.assets.find(x => x.name.includes(os.platform()));
-                if (!asset) return consolelog(`No compatible update download found.. (${os.platform()})`);
-                consolelog(`Downloading update...`);
-                //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
-                download(asset.browser_download_url,)
-                function download(url) {
-                    https.get(url, down => {
-                        if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                        var filePath = `${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`;
-                        var file = fs.createWriteStream(filePath);
-                        down.pipe(file
-                            .on(`finish`, () => {
-                                file.close();
-                                fs.chmodSync(filePath, 0777)
-                                updateCompleted = true;
-                                consolelog(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
-                                child.spawn(process.argv[0], process.argv.slice(1), {
-                                    stdio: 'inherit',
-                                });
-                                //process.exit(); // will make the child proccss "unkillable"
-                                //r(); // wait forever
-                            }))
-                    });
-                }
+    if (config.update) await update();
+
+    var options = [
+        {
+            name: `cook`,
+            color: `#00ff00`,
+            run: cook,
+        },
+        {
+            name: `publish`,
+            color: `#00FFFF`,
+            run: publish,
+        },
+        {
+            name: `backup`,
+            color: `#03a5fc`,
+            run: backup,
+        },
+        { // shows backups which you can load and delete
+            name: `list backups`,
+            color: `#0328fc`,
+        },
+        {
+            name: `drg`,
+            color: `#ffa500`,
+            run: startDrg,
+        },
+        {
+            name: `quit`,
+            color: `#ff0000`,
+            run: exitHandler,
+        },
+        /*{
+            name: `log`,
+            color: `#ff0000`,
+            run: () => consolelog(`AAA`),
+        },*/
+    ];
+    var selected = 0;
+    var longestOption = 0;
+    options.forEach(x => {
+        if (longestOption < x.name.length)
+            longestOption = x.name.length;
+    });
+    if (config.ui && process.argv.length == 2) {
+        readline.emitKeypressEvents(process.stdin);
+        if (process.stdin.isTTY) process.stdin.setRawMode(true);
+        process.stdin.on('keypress', (chunk, key) => {
+            var k = key.name || key.sequence;
+            var selectedOptions = options[selected];
+            //console.log(key);
+            switch (k) {
+                case `up`:
+                    if (selected - 1 < 0)
+                        selected = options.length - 1;
+                    else
+                        selected--;
+                    break;
+                case `down`:
+                    if (selected + 1 >= options.length)
+                        selected = 0;
+                    else
+                        selected++;
+                    break;
+                case `return`:
+                    if (selectedOptions) {
+                        consolelog(`Running ${chalk.hex(dyn(selectedOptions.color))(selectedOptions.name)}`);
+                        selectedOptions.run();
+                    }
+                    break;
+                case `q`:
+                    return exitHandler();
+                case `C`:
+                case `c`:
+                    if (key.ctrl) return exitHandler();
+                    break;
             }
+            draw();
         });
+        //setInterval(draw, 100);
+        draw();
+        function dyn(a) { // dynamic
+            return typeof a == `function` ? a() : a;
+        }
+        consoleloge.on('log', log => draw());
+        function draw(clean = false) {
+            console.clear();
+
+            // bg logs
+            logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0)).forEach((x, i) => {
+                process.stdout.cursorTo(0, /*process.stdout.rows - 2 - */i);
+                process.stdout.write(x);
+            });
+
+            // options
+            options.forEach((x, i) => {
+                var name = dyn(x.name);
+                var nameC = name.replace(name, chalk.hex(dyn(x.color))(name));
+                var opt = clean ? ``.padStart(name.length, ` `) : nameC;
+                var X = Math.floor(process.stdout.columns * .5 - name.length * .5);
+                var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
+                process.stdout.cursorTo(X, Y); // x=left/right y=up/down
+                process.stdout.write(opt);
+            });
+
+            // selection arrows
+            var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
+            process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 1, y);
+            process.stdout.write(`>`);
+            process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5), y);
+            process.stdout.write(`<`);
+
+            // latest log
+            //process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - latestLog.length * .5), process.stdout.rows - 2);
+            //process.stdout.write(latestLog);
+
+            // reset location
+            process.stdout.cursorTo(0, process.stdout.rows);
+        }
+        return;
     }
-    await update();
 
     if (process.argv.includes(`-verify`)) return;
     //if (process.argv.includes(`-help`)) return consolelog(``);
@@ -640,8 +805,6 @@ if (module.parent) return; // required as a module
         config.logs = `${__dirname}/temp/backuplogs.txt`;
         logsDisabled = true;
     }
-
-    logFile
 
     // unpack from argument
     var unpackFile = process.argv.find(x => x.includes(`.pak`));
@@ -698,12 +861,10 @@ if (module.parent) return; // required as a module
         });
     }
 
-    if (config.logConfig)
-        consolelog();
+    if (config.logConfig) consolelog();
     logFile(`${JSON.stringify(config, null, 4)}\n`);
 
-    if (process.argv.includes(`-bu`))
-        return backup();
+    if (process.argv.includes(`-bu`)) return backup();
 
     if (process.argv.find(x => x.includes(`-listbu`))) { // list backups
         var backuppath = fs.readdirSync(`${__dirname}/backups`)
@@ -795,17 +956,7 @@ if (module.parent) return; // required as a module
                 if (config.backup.onCompile)
                     await backup();
 
-                if (config.startDRG)
-                    await new Promise(r => {
-                        consolelog(`Launching DRG...`);
-                        child.exec(`steam steam://rungameid/548430`)
-                            .on(`exit`, () => {
-                                consolelog(`Lauched DRG`); // most likely
-                                r();
-                            })
-                            .on(`message`, (d) => logFile(String(d)))
-                            .stdout.on('data', (d) => logFile(String(d)))
-                    })
+                if (config.startDRG) await startDrg();
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
                 /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
@@ -854,19 +1005,10 @@ if (module.parent) return; // required as a module
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }*/
 
-    if (config.startDRG && config.killDRG) { // kill drg and before cooking to save ram
-        var prcList = await find('name', 'FSD');
-        //consolelog(prcList);
-        prcList.forEach(x => {
-            try {
-                if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
-                    process.kill(x.pid);
-            } catch (error) { }
-        })
-    }
+    if (config.startDRG && config.killDRG) // kill drg and before cooking to save ram
+        await killDrg();
 
     cook();
-
     function cook() {
         consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
         refreshDirsToNeverCook();
