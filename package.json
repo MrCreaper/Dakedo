@@ -5,7 +5,8 @@
   "main": "compile.js",
   "scripts": {
     "verify": "node . -verify",
-    "publish": "node . -publish"
+    "publish": "node . -publish",
+    "pkg": "pkg compile.js && ./compile-linux"
   },
   "repository": {
     "type": "git",
@@ -22,6 +23,9 @@
     "zip-lib": "^0.7.3"
   },
   "pkg": {
-    "assets": ["./umodel","./umodel.exe"]
+    "assets": [
+      "./umodel",
+      "./umodel.exe"
+    ]
   }
 }

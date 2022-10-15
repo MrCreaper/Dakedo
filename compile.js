@@ -109,9 +109,14 @@ function findModVersion() {
     if (!raw) return `unVersioned`;
     return raw;
 }
+
+function removeColor(input) {
+    return input.replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
+}
 var utcNow = new Date(new Date().toUTCString());
 
 const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
+__dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 
 const username = os.userInfo().username;
 
@@ -298,7 +303,7 @@ module.exports.uploadMod = uploadMod = async (
     })
 };
 
-module.exports.deleteModFile = deleteModFile = async function deleteModFile(id) {
+module.exports.deleteModFile = deleteModFile = async function (id) {
     return new Promise(async (r, re) => {
         var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
             method: 'delete',
@@ -368,7 +373,7 @@ module.exports.pack = (outPath) => {
     });
 };
 
-module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
+module.exports.unpack = unpack = function (path, outpath = W__dirname) {
     consolelog(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`);
     if (wine) {
         path = `Z:${path}`;
@@ -391,7 +396,7 @@ module.exports.unpack = unpack = function unpack(path, outpath = W__dirname) {
 }
 
 
-module.exports.backup = backup = function backup() {
+module.exports.backup = backup = function () {
     return new Promise(async r => {
         try {
             consolelog(`Making backup...`);
@@ -447,7 +452,7 @@ module.exports.backup = backup = function backup() {
     })
 };
 
-module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function refreshDirsToNeverCook(whitelist = [config.ModName]) {
+module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName]) {
     whitelist = whitelist.concat(config.DirsToCook)
     var configFile = `${__dirname}/../Config/DefaultGame.ini`;
     var read = fs.readFileSync(configFile, `utf8`);
@@ -462,7 +467,7 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function refres
     fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
 }
 
-module.exports.loadbackup = loadbackup = async function loadbackup(id) {
+module.exports.loadbackup = loadbackup = async function (id) {
     if (!id)
         if (!fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`))
             consolelog(`Missing id.`)
@@ -636,12 +641,12 @@ if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPa
 
 if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return consolelog(`Couldnt find Config/DefaultGame.ini`);
 
-var cookingChild;
+var children = [];
 var updateCompleted = false;
-async function exitHandler(err, skip = false) {
+async function exitHandler(err) {
     if (fs.existsSync(`${__dirname}/temp/`) && process.pkg) fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
     //if (!updateCompleted && fs.existsSync(`${__dirname}/compile`)) fs.rmSync(`${__dirname}/compile`);
-    if (cookingChild) cookingChild.destroy();
+    children.forEach(x => x.kill());
     if (err && err != `SIGINT`) console.log(err);
     if (process.pkg) await keypress();
     process.exit();
@@ -655,7 +660,6 @@ process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
 fs.writeFileSync(config.logs, ``);
-__dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 
 if (module.parent) return; // required as a module
 
@@ -683,9 +687,47 @@ if (module.parent) return; // required as a module
             color: `#03a5fc`,
             run: backup,
         },
+        {
+            name: `unload backup`,
+            color: `#ffa500`,
+            run: () => loadbackup(),
+            hidden: () => {
+                return fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`);
+            }
+        },
         { // shows backups which you can load and delete
             name: `list backups`,
             color: `#0328fc`,
+            run: () => {
+                var listBackupOptions = [
+                    {
+                        name: `back`,
+                        color: `#00FFFF`,
+                        run: () => {
+                            selectedOptions = options;
+                            selected = 3;
+                        },
+                    },
+                ];
+                var backuppath = fs.readdirSync(`${__dirname}/backups`)
+                if (!backuppath) return consolelog(`Invalid backup id!`);
+                backuppath.sort(function (a, b) {
+                    var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
+                    var b = new Date(new Date().toUTCString()) - new Date(b.split(` - `)[1])
+                    if (a < b) return 1;
+                    if (a > b) return -1;
+                    return 0;
+                });
+                backuppath.forEach(x => {
+                    listBackupOptions.push({
+                        name: `${chalk.cyan(x.split(` - `)[0])} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`,
+                        color: `#FFFFFF`,
+                        run: () => loadbackup(x.split(` - `)[0]),
+                    });
+                });
+                selectedOptions = listBackupOptions;
+                selected = 0;
+            }
         },
         {
             name: `drg`,
@@ -703,37 +745,34 @@ if (module.parent) return; // required as a module
             run: () => consolelog(`AAA`),
         },*/
     ];
+    var selectedOptions = options;
     var selected = 0;
-    var longestOption = 0;
-    options.forEach(x => {
-        if (longestOption < x.name.length)
-            longestOption = x.name.length;
-    });
     if (config.ui && process.argv.length == 2) {
         readline.emitKeypressEvents(process.stdin);
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
         process.stdin.on('keypress', (chunk, key) => {
             var k = key.name || key.sequence;
-            var selectedOptions = options[selected];
+            selectedOptions = selectedOptions.filter(x => x.hidden ? x.hidden() : true);
+            var selectedOption = selectedOptions[selected];
             //console.log(key);
             switch (k) {
                 case `up`:
                     if (selected - 1 < 0)
-                        selected = options.length - 1;
+                        selected = selectedOptions.length - 1;
                     else
                         selected--;
                     break;
                 case `down`:
-                    if (selected + 1 >= options.length)
+                    if (selected + 1 >= selectedOptions.length)
                         selected = 0;
                     else
                         selected++;
                     break;
                 case `return`:
-                    if (selectedOptions) {
-                        consolelog(`Running ${chalk.hex(dyn(selectedOptions.color))(selectedOptions.name)}`);
-                        selectedOptions.run();
-                    }
+                    if (selectedOption && selectedOption.run) {
+                        consolelog(`Running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
+                        selectedOption.run();
+                    } else consolelog(`No run command for ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
                     break;
                 case `q`:
                     return exitHandler();
@@ -750,7 +789,13 @@ if (module.parent) return; // required as a module
             return typeof a == `function` ? a() : a;
         }
         consoleloge.on('log', log => draw());
-        function draw(clean = false) {
+        function draw(clean = false, options = selectedOptions) {
+            options = options.filter(x => x.hidden ? x.hidden() : true);
+            var longestOption = 0;
+            options.forEach(x => {
+                var l = removeColor(dyn(x.name)).length;
+                if (longestOption < l) longestOption = l;
+            });
             console.clear();
 
             // bg logs
@@ -761,10 +806,11 @@ if (module.parent) return; // required as a module
 
             // options
             options.forEach((x, i) => {
-                var name = dyn(x.name);
+                var name = x.name;
+                var nameNC = removeColor(dyn(name))
                 var nameC = name.replace(name, chalk.hex(dyn(x.color))(name));
-                var opt = clean ? ``.padStart(name.length, ` `) : nameC;
-                var X = Math.floor(process.stdout.columns * .5 - name.length * .5);
+                var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
+                var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
                 var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
                 process.stdout.cursorTo(X, Y); // x=left/right y=up/down
                 process.stdout.write(opt);
@@ -923,7 +969,7 @@ if (module.parent) return; // required as a module
         fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
         fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-        child.exec(config.PackingCmd)
+        var ch = child.exec(config.PackingCmd)
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
@@ -952,10 +998,7 @@ if (module.parent) return; // required as a module
                     var files = await getFiles();
                     files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
                 }*/
-
-                if (config.backup.onCompile)
-                    await backup();
-
+                if (config.backup.onCompile) await backup();
                 if (config.startDRG) await startDrg();
 
                 // clear swap, can couse crashes couse it just piles up after compiles for some reason?
@@ -971,6 +1014,7 @@ if (module.parent) return; // required as a module
                 consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
             })
             .stdout.on('data', (d) => logFile(String(d)));
+        children.push(ch);
     }
     if (process.argv.includes(`-unpackdrg`)) return unpack(`${config.SteamInstall}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
     if (process.argv.includes(`-export`)) return exportTex();
@@ -1013,7 +1057,7 @@ if (module.parent) return; // required as a module
         consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
         refreshDirsToNeverCook();
         logFile(`\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
-        cookingChild = child.exec(config.CookingCmd)
+        var ch = child.exec(config.CookingCmd)
             .on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
                 if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
@@ -1077,5 +1121,6 @@ if (module.parent) return; // required as a module
                 }
             })
             .stdout.on('data', (d) => logFile(String(d)));
+        children.push(ch);
     }
 })();
