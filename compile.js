@@ -25,6 +25,7 @@ function consolelog(log = ``, urgent = false) {
             logHistory.pop();
         }
         consoleloge.emit(`log`, log);
+        logFile(`${log}\n`);
     }
 }
 
@@ -264,7 +265,7 @@ Object.keys(paths).forEach(x => {
 });
 
 function logFile(log) {
-    fs.appendFileSync(config.logs, log)
+    fs.appendFileSync(config.logs, removeColor(log))
 }
 
 // exports
@@ -380,7 +381,7 @@ module.exports.unpack = unpack = function (path, outpath = W__dirname) {
         //outpath = `Z:${outpath}`;
     }
     const cmd = config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath);
-    logFile(`Unpacking ${path}\n${cmd}\n\n`)
+    logFile(`${path}\n${cmd}\n\n`)
     child.exec(cmd)
         .on('exit', async () => {
             var d = fs.readFileSync(config.logs);
@@ -521,8 +522,8 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.SteamInstall}/FSD/
         `-nolightmap`,
     ];
     fs.mkdirsSync(out);
-    logFile(`\n${cmd} ${args.join(` `)}\n`);
     consolelog(`Exporting...`);
+    logFile(`\n${cmd} ${args.join(` `)}\n`);
     child.spawn(cmd, args)
         .on('exit', async () => {
             var d = fs.readFileSync(config.logs, `utf8`).split(`\n`);
@@ -681,6 +682,9 @@ if (module.parent) return; // required as a module
             name: `publish`,
             color: `#00FFFF`,
             run: publish,
+            hidden: () => {
+                return config.modio.token && config.modio.gameid && config.modio.modid;
+            },
         },
         {
             name: `backup`,
@@ -693,7 +697,7 @@ if (module.parent) return; // required as a module
             run: () => loadbackup(),
             hidden: () => {
                 return fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`);
-            }
+            },
         },
         { // shows backups which you can load and delete
             name: `list backups`,
@@ -770,14 +774,19 @@ if (module.parent) return; // required as a module
                     break;
                 case `return`:
                     if (selectedOption && selectedOption.run) {
-                        consolelog(`Running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
-                        logHistory = [];
-                        var run = selectedOption.run();
-                        if (String(run) == `[object Promise]`) {
-                            selectedOption.running = true;
-                            run.then(() =>
-                                selectedOption.running = false
-                            );
+                        if (selectedOption.running) {
+                            // canceling processes would be sick
+                            consolelog(`Already running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
+                        } else {
+                            logHistory = [];
+                            consolelog(`Running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}...`);
+                            var run = selectedOption.run();
+                            if (String(run) == `[object Promise]`) {
+                                selectedOption.running = true;
+                                run.then(() =>
+                                    selectedOption.running = false
+                                );
+                            }
                         }
                     } else consolelog(`No run command for ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
                     break;
@@ -983,7 +992,7 @@ if (module.parent) return; // required as a module
     function pack() {
         return new Promise(r => {
             consolelog(`packing ${config.ModName}...`);
-            logFile(`\npacking ${config.ModName}...\n${config.PackingCmd}\n\n`);
+            logFile(`\n${config.PackingCmd}\n\n`);
 
             if (fs.existsSync(`${__dirname}/temp/`))
                 fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
@@ -1048,10 +1057,10 @@ if (module.parent) return; // required as a module
 
     /*module.exports.jsonify = jsonify = function jsonify(file) {
         const { Extractor } = require('node-wick');
-
+    
         // Make a new Extractor by specifying the file path (minus the extension), and the AES encryption key as a hexadecimal string.
         let extractor = new Extractor("pakchunk", "");
-
+    
         // Iterate over all the files in the ucas, and extract them.
         // get_file_list returns an array of file paths within the ucas. You will need the index in the array to extract the files.
         extractor.get_file_list().forEach((v, idx) => {
@@ -1067,7 +1076,7 @@ if (module.parent) return; // required as a module
         //return exitHandler();
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }
-
+    
     if (fs.existsSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !fs.accessSync(`${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
         consolelog(`\nNo access to ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
         if (platform == `linux`) consolelog(`Please run:\nchmod 7777 -R ${config.SteamInstall}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
@@ -1083,7 +1092,7 @@ if (module.parent) return; // required as a module
         return new Promise(r => {
             consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
             refreshDirsToNeverCook();
-            logFile(`\ncooking ${config.ModName}...\n${config.CookingCmd}\n\n`);
+            logFile(`\n${config.CookingCmd}\n\n`);
             var ch = child.exec(config.CookingCmd)
                 .on('exit', async () => {
                     var d = fs.readFileSync(config.logs, `utf8`);
@@ -1152,3 +1161,6 @@ if (module.parent) return; // required as a module
         });
     }
 })();
+
+// ~ for console
+// recompileshaders all
