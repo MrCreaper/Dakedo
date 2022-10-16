@@ -664,7 +664,7 @@ async function exitHandler(err) {
         children.splice(children.findIndex(x => x == x), 1);
     });
     if (err && err != `SIGINT`) console.log(err);
-    if (process.pkg) await keypress();
+    if (process.pkg && !uiMode) await keypress();
     process.exit();
 }
 process.on('exit', exitHandler);
@@ -678,6 +678,7 @@ process.on('uncaughtException', exitHandler);
 fs.writeFileSync(config.logs, ``);
 
 if (module.parent) return; // required as a module
+const uiMode = config.ui && process.argv.length == 2;
 
 (async () => {
 
@@ -833,7 +834,7 @@ if (module.parent) return; // required as a module
     ];
     var selectedOptions = options;
     var selected = 0;
-    if (config.ui && process.argv.length == 2) {
+    if (uiMode) {
         readline.emitKeypressEvents(process.stdin);
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
         process.stdin.on('keypress', (chunk, key) => {
