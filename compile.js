@@ -198,30 +198,8 @@ const originalplatformPaths = {
 const platformPaths = JSON.parse(JSON.stringify(originalplatformPaths)); // new instance, no longer a refrence
 
 const configPath = `${__dirname}/config.json`;
-const forceNew = false;
-if (fs.existsSync(configPath) && !forceNew) {
-    var tempconfig = fs.readFileSync(configPath);
-    if (!isJsonString(tempconfig)) {
-        writeConfig(config);
-        consolelog("Config fucked, please update it again.");
-        exitHandler();
-        return;
-    }
-    tempconfig = JSON.parse(tempconfig);
-    config = checkConfig(config, tempconfig);
-    function checkConfig(base = {}, check = {}) {
-        Object.keys(base).forEach(x => {
-            if (typeof base[x] == `object`)
-                base[x] = checkConfig(base[x], check[x]);
-            else
-                if (check[x] != undefined && typeof base[x] == typeof check[x])
-                    base[x] = check[x];
-        });
-        return base;
-    }
-}
 
-function writeConfig(c) {
+function writeConfig(c = {}) {
     fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
 }
 
@@ -236,33 +214,58 @@ function updatePlatPathVariables() {
         )
     );
 }
-
-var unVaredConfig = JSON.parse(JSON.stringify(config));
-
-updatePlatPathVariables();
-const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
-const platform = `${os.platform().replace(/[3264]/, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
-var paths = platformPaths[platform];
-if (!paths) paths = platformPaths.givenUpos;
-updatePlatPathVariables();
-
-Object.keys(paths).forEach(key => {
-    if (config[key] == undefined || config[key] == ``) {
-        unVaredConfig[key] = originalplatformPaths[platform][key];
-        config[key] = paths[key];
+var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
+updateConfig();
+function updateConfig(forceNew = false) {
+    if (fs.existsSync(configPath) && !forceNew) {
+        var tempconfig = fs.readFileSync(configPath);
+        if (!isJsonString(tempconfig)) {
+            writeConfig(config);
+            consolelog("Config fucked, please update it again.");
+            exitHandler();
+            return;
+        }
+        tempconfig = JSON.parse(tempconfig);
+        config = checkConfig(config, tempconfig);
+        function checkConfig(base = {}, check = {}) {
+            Object.keys(base).forEach(x => {
+                if (typeof base[x] == `object`)
+                    base[x] = checkConfig(base[x], check[x]);
+                else
+                    if (check[x] != undefined && typeof base[x] == typeof check[x])
+                        base[x] = check[x];
+            });
+            return base;
+        }
     }
-});
-writeConfig(unVaredConfig);
-const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
-if (tempModName) config.ModName = tempModName;
-Object.keys(paths).forEach(x => {
-    if (typeof config[x] == `string`)
-        config[x] = config[x]
-            .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
-            //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
-            .replace(/{me}/g, username)
-            .replace(/{mod}/g, config.ModName)
-});
+
+    unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
+
+    updatePlatPathVariables();
+    const wine = fs.existsSync(platformPaths.linuxwine.UnrealEngine);
+    const platform = `${os.platform().replace(/[3264]/, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
+    var paths = platformPaths[platform];
+    if (!paths) paths = platformPaths.givenUpos;
+    updatePlatPathVariables();
+
+    Object.keys(paths).forEach(key => {
+        if (config[key] == undefined || config[key] == ``) {
+            unVaredConfig[key] = originalplatformPaths[platform][key];
+            config[key] = paths[key];
+        }
+    });
+    writeConfig(unVaredConfig);
+    const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
+    if (tempModName) config.ModName = tempModName;
+    Object.keys(paths).forEach(x => {
+        if (typeof config[x] == `string`)
+            config[x] = config[x]
+                .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
+                //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
+                .replace(/{me}/g, username)
+                .replace(/{mod}/g, config.ModName)
+    });
+}
 
 function logFile(log) {
     fs.appendFileSync(config.logs, removeColor(log))
@@ -609,8 +612,15 @@ async function startDrg() {
     return new Promise(async r => {
         await killDrg();
         consolelog(`Launching DRG...`);
+        var exited = false;
+        setTimeout(() => {
+            if (exited) return;
+            consolelog(`Timedout launching DRG`);
+            r();
+        }, 10000);
         child.exec(`steam steam://rungameid/548430`)
             .on(`exit`, () => {
+                exited = true;
                 consolelog(`Lauched DRG`); // most likely
                 r();
             })
@@ -735,6 +745,70 @@ if (module.parent) return; // required as a module
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
+            name: `settings`,
+            color: `#808080`,
+            run: () => {
+                var settingsOptions = [
+                    {
+                        name: `back`,
+                        color: `#00FFFF`,
+                        run: () => {
+                            selectedOptions = options;
+                            selected = selectedOptions.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == `settings`);
+                        },
+                    },
+                ];
+                addSettings();
+                function addSettings(configs = unVaredConfig, path = []) {
+                    Object.keys(configs).forEach(key => {
+                        var val = configs[key];
+                        switch (typeof val) {
+                            case `object`:
+                                return addSettings(val, path.concat([key]));
+                            case `boolean`:
+                                break;
+                            default:
+                                return;
+                        }
+                        var setting = {
+                            name: () => {
+                                var name = path.length == 0 ? key : `${path.join(` > `)} > ${key}`;
+                                var color = ``;
+                                switch (typeof val) {
+                                    case `boolean`:
+                                        if (val)
+                                            color = `#00ff00`; // on
+                                        else
+                                            color = `#ff0000`; // off
+                                        break;
+                                    default:
+                                        color = `#ffffff`;
+                                }
+                                return name.replace(key, chalk.hex(color)(key));
+                            },
+                            run: () => {
+                                switch (typeof val) {
+                                    case `boolean`:
+                                        val = !val;
+                                        break;
+                                }
+                                var unVaredConfig0 = unVaredConfig;
+                                path.forEach(x => unVaredConfig0 = unVaredConfig0[x]);
+                                unVaredConfig0[key] = val;
+                                writeConfig(unVaredConfig);
+                                //consolelog(unVaredConfig);
+                                updateConfig();
+                            },
+                        };
+                        settingsOptions.push(setting);
+                    });
+                }
+                selectedOptions = settingsOptions;
+                selected = 0;
+            },
+            hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
+        },
+        {
             name: `drg`,
             color: `#ffa500`,
             run: startDrg,
@@ -774,22 +848,24 @@ if (module.parent) return; // required as a module
                         selected++;
                     break;
                 case `return`:
+                    var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color))(dyn(selectedOption.name)) : dyn(selectedOption.name);
                     if (selectedOption && selectedOption.run) {
                         if (selectedOption.running) {
                             // canceling processes would be sick
-                            consolelog(`Already running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
+                            consolelog(`Already running ${name}`);
                         } else {
                             logHistory = [];
-                            consolelog(`Running ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}...`);
+                            consolelog(`Running ${name}...`);
                             var run = selectedOption.run();
                             if (String(run) == `[object Promise]`) {
                                 selectedOption.running = true;
-                                run.then(() =>
-                                    selectedOption.running = false
-                                );
+                                run.then(() => {
+                                    selectedOption.running = false;
+                                    draw();
+                                });
                             }
                         }
-                    } else consolelog(`No run command for ${chalk.hex(dyn(selectedOption.color))(selectedOption.name)}`);
+                    } else consolelog(`No run command for ${name}`);
                     break;
                 case `q`:
                     return exitHandler();
@@ -831,7 +907,7 @@ if (module.parent) return; // required as a module
 
             // options
             options.forEach((x, i) => {
-                var name = x.name;
+                var name = dyn(x.name);
                 switch (name) {
                     case `cook`:
                     case `publish`:
@@ -841,7 +917,7 @@ if (module.parent) return; // required as a module
                         break;
                 }
                 var nameNC = removeColor(dyn(name))
-                var nameC = name.replace(name, chalk.hex(dyn(x.color))(name));
+                var nameC = x.color ? chalk.hex(dyn(x.color))(name) : name; // color if there is a name
                 var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
                 var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
                 var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
@@ -932,6 +1008,7 @@ if (module.parent) return; // required as a module
                 case `string`:
                     coloredVal = chalk.redBright(config[x]);
                     break;
+                default:
                 case `undefined`:
                     coloredVal = chalk.blue(config[x]);
                     break;
@@ -1035,7 +1112,7 @@ if (module.parent) return; // required as a module
                     if (config.backup.onCompile) await backup();
                     if (config.startDRG) await startDrg();
 
-                    // clear swap, can couse crashes couse it just piles up after compiles for some reason?
+                    // clear swap, can couse crashes couse it just piles up after compiles for some reason? Requires root
                     /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
                         consolelog(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
                         await new Promise(r =>
@@ -1094,6 +1171,7 @@ if (module.parent) return; // required as a module
             consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
             refreshDirsToNeverCook();
             logFile(`\n${config.CookingCmd}\n\n`);
+            killDrg();
             var ch = child.exec(config.CookingCmd)
                 .on('exit', async () => {
                     var d = fs.readFileSync(config.logs, `utf8`);
