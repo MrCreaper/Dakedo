@@ -750,6 +750,9 @@ if (module.parent) return; // required as a module
             run: () => {
                 var settingsOptions = [
                     {
+                        name: () => `${config.ProjectName} > ${config.ModName}`,
+                    },
+                    {
                         name: `back`,
                         color: `#00FFFF`,
                         run: () => {
@@ -796,7 +799,6 @@ if (module.parent) return; // required as a module
                                 path.forEach(x => unVaredConfig0 = unVaredConfig0[x]);
                                 unVaredConfig0[key] = val;
                                 writeConfig(unVaredConfig);
-                                //consolelog(unVaredConfig);
                                 updateConfig();
                             },
                         };
@@ -804,7 +806,7 @@ if (module.parent) return; // required as a module
                     });
                 }
                 selectedOptions = settingsOptions;
-                selected = 0;
+                selected = 1;
             },
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
@@ -836,16 +838,28 @@ if (module.parent) return; // required as a module
             //console.log(key);
             switch (k) {
                 case `up`:
-                    if (selected - 1 < 0)
-                        selected = selectedOptions.length - 1;
-                    else
-                        selected--;
+                    subS();
+                    while (!selectedOptions[selected].run) {
+                        subS();
+                    }
+                    function subS() {
+                        if (selected - 1 < 0)
+                            selected = selectedOptions.length - 1;
+                        else
+                            selected--;
+                    }
                     break;
                 case `down`:
-                    if (selected + 1 >= selectedOptions.length)
-                        selected = 0;
-                    else
-                        selected++;
+                    addS();
+                    while (!selectedOptions[selected].run) {
+                        addS();
+                    }
+                    function addS() {
+                        if (selected + 1 >= selectedOptions.length)
+                            selected = 0;
+                        else
+                            selected++;
+                    }
                     break;
                 case `return`:
                     var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color))(dyn(selectedOption.name)) : dyn(selectedOption.name);
