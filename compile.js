@@ -14,22 +14,27 @@ const consoleloge = new Emitter();
 
 var latestLog = ``;
 var logHistory = [];
+/**
+ * Custom log function
+ * @param {string} log the log
+ * @param {boolean} urgent Used for logging very important stuff as module
+ * @returns {intreger} logHistory index
+ */
 function consolelog(log = ``, urgent = false) {
     if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
     if (log) {
         latestLog = log;
-        logHistory.push(log);
+        var i = logHistory.push(log);
         while (logHistory.length > 100) {
             logHistory.pop();
         }
         consoleloge.emit(`log`, log);
         logFile(`${log}\n`);
+        return i;
     }
 }
-
-const startTime = new Date();
 
 function formatTime(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
@@ -869,7 +874,7 @@ if (module.parent) return; // required as a module
                             consolelog(`Already running ${name}`);
                         } else {
                             logHistory = [];
-                            consolelog(`Running ${name}...`);
+                            //consolelog(`Running ${name}...`);
                             var run = selectedOption.run();
                             if (String(run) == `[object Promise]`) {
                                 selectedOption.running = true;
@@ -1083,7 +1088,7 @@ if (module.parent) return; // required as a module
 
     function pack() {
         return new Promise(r => {
-            consolelog(`packing ${config.ModName}...`);
+            consolelog(`packing...`);
             logFile(`\n${config.PackingCmd}\n\n`);
 
             if (fs.existsSync(`${__dirname}/temp/`))
@@ -1180,9 +1185,12 @@ if (module.parent) return; // required as a module
         await killDrg();
 
     cook();
+    var startTime = new Date();
     function cook() {
         return new Promise(r => {
-            consolelog(`cooking ${chalk.cyan(config.ModName)}...`);
+            startTime = new Date();
+            consolelog(`Processing ${chalk.cyan(config.ModName)}`);
+            consolelog(`cooking...`);
             refreshDirsToNeverCook();
             logFile(`\n${config.CookingCmd}\n\n`);
             killDrg();
