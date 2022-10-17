@@ -280,35 +280,70 @@ function logFile(log) {
 module.exports.config = config;
 
 module.exports.uploadMod = uploadMod = async (
-    zip,
-    active = false,
+    zip = `${__dirname}/${config.ModName}.zip`, // mods folder one dosent have permission so maybe not? `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`
+    active = true,
     version = config.modio.dateVersion ? `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth()}.${utcNow.getUTCDate()}` : findModVersion(),
     changelog = `Uploaded: ${utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, '')} UTC`,
+    meta = ``,
 ) => {
     return new Promise(async (r, re) => {
         if (fs.statSync(zip).size > 5368709120) return consolelog(`Zip bigger then 5gb`);
         var body = {
-            filedata: `@${zip}`,
-            //filedata: fs.readFileSync(zip, `binary`),
+            //filedata: `@${zip}`,
+            filedata: fs.readFileSync(zip, `binary`),
             //filehash: crypto.createHash('md5').update(fs.readFileSync(zip, `binary`)).digest('hex'),
             version: version,
             //active: active,
-            changelog: changelog
+            changelog: changelog,
+            //metadata_blob: meta,
         };
-        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
-            method: 'post',
+        /*var res = await fetch(`http://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${config.modio.token}`,
                 'Content-Type': 'multipart/form-data',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
             },
             body: JSON.stringify(body),
+        });*/
+        const https = require('https');
+
+        var postData = JSON.stringify(body);
+
+        var options = {
+            hostname: 'api.mod.io',
+            port: 443,
+            path: `/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`,
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${config.modio.token}`,
+                'Content-Type': 'multipart/form-data',
+                'Accept': 'application/json',
+            }
+        };
+
+        var req = https.request(options, (res) => {
+            console.log('statusCode:', res.statusCode);
+            console.log('headers:', res.headers);
+
+            res.on('data', (d) =>
+                //process.stdout.write
+                consolelog(String(d))
+            );
         });
-        consolelog(body);
-        consolelog(await res.json());
+
+        req.on('error', (e) => {
+            consolelog(e);
+        });
+
+        req.write(postData);
+        req.end();
+        //consolelog(body.filedata);
+        /*res = await res.json();
+        if (res.error) consolelog(res);
         if (res.status == 201)
             r(true);
-        else r(res);
+        else r(res);*/
     })
 };
 
@@ -466,6 +501,7 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
     var configFile = `${__dirname}/../Config/DefaultGame.ini`;
     var read = fs.readFileSync(configFile, `utf8`);
     read = read.split(getLineBreakChar(read));
+    if (!read.includes(`BuildConfiguration=PPBC_Shipping`)) read.push(`BuildConfiguration=PPBC_Shipping`); // has to be shipping
 
     var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
     read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
@@ -1075,7 +1111,7 @@ if (module.parent) return; // required as a module
                 await zl.archiveFolder(`${config.SteamInstall}/FSD/Mods/${config.ModName}/`, `${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`);
                 madeZip = true;
             }
-            var res = await uploadMod(`${config.SteamInstall}/FSD/Mods/${config.ModName}.zip`, true);
+            var res = await uploadMod();
             if (res != true)
                 consolelog(`Failed ${res.status}: ${res.statusText}`);
             else consolelog(`Published!`);
