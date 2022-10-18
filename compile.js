@@ -24,16 +24,15 @@ function consolelog(log = ``, urgent = false) {
     if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
-    if (log) {
-        latestLog = log;
-        var i = logHistory.push(log);
-        while (logHistory.length > 100) {
-            logHistory.pop();
-        }
-        consoleloge.emit(`log`, log);
-        logFile(`${log}\n`);
-        return i;
+    if (!log && log != 0) return;
+    latestLog = log;
+    var i = logHistory.push(log);
+    while (logHistory.length > 100) {
+        logHistory.pop();
     }
+    consoleloge.emit(`log`, log);
+    logFile(`${log}\n`);
+    return i;
 }
 
 function formatTime(time) {
@@ -869,6 +868,7 @@ if (module.parent) return; // required as a module
     ];
     var selectedOptions = options;
     var selected = 0;
+    var logPush = 0;
     if (config.ui && process.argv.length == 2) {
         readline.emitKeypressEvents(process.stdin);
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -877,6 +877,7 @@ if (module.parent) return; // required as a module
             selectedOptions = selectedOptions.filter(x => x.hidden ? x.hidden() : true);
             var selectedOption = selectedOptions[selected];
             //console.log(key);
+            //qconsolelog(k);
             switch (k) {
                 case `up`:
                     subS();
@@ -901,6 +902,14 @@ if (module.parent) return; // required as a module
                         else
                             selected++;
                     }
+                    break;
+                case `left`: // up -
+                    if (logPush > 0)
+                        logPush--;
+                    break;
+                case `right`: // down +
+                    if (logHistory.length > logPush)
+                        logPush++;
                     break;
                 case `return`:
                     var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color))(dyn(selectedOption.name)) : dyn(selectedOption.name);
@@ -947,14 +956,17 @@ if (module.parent) return; // required as a module
             console.clear();
 
             // bg logs
-            logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0)).forEach((x, i) => {
+            logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0) + logPush).forEach((x, i) => {
                 process.stdout.cursorTo(0, /*process.stdout.rows - 2 - */i);
                 switch (typeof x) {
                     case `object`:
-                        x = JSON.stringify(x);
+                        x = JSON.stringify(x, null, 4);
                         break;
                     case `function`:
                         x = `Function: ${x.name}`;
+                        break;
+                    case `number`:
+                        x = String(x);
                         break;
                 }
                 process.stdout.write(x);
@@ -964,7 +976,7 @@ if (module.parent) return; // required as a module
             options.forEach((x, i) => {
                 var name = dyn(x.name);
                 switch (name) {
-                    case `cook`:
+                    case `cook`: logPush
                     case `publish`:
                     case `backup`:
                         if (x.running) name += `ing`;
