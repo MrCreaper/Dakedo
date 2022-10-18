@@ -2,6 +2,10 @@
 
 A compiler that runs and is nice
 
+## UI
+
+Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPACE to select.
+
 ## Config
 
 ```yaml

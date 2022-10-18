@@ -115,15 +115,34 @@ function findModVersion() {
     return raw;
 }
 
+/**
+ * Clears swap and ram
+ * @param {boolean} force 
+ * @returns {void}
+ */
+async function clearMem(force = config.ClearSwap) {
+    if (process.getuid() != 0) return; // requires root
+    if (os.freemem() / os.totalmem() > .5 || force)
+        return new Promise(r =>
+            child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
+                consolelog(`Memory cleared.`);
+                r();
+            }));
+}
+
 function removeColor(input) {
     return input.replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
+}
+
+function getUsername() {
+    return child.spawnSync(`users`).output[1].toString().replace(/\n/, ``);
 }
 var utcNow = new Date(new Date().toUTCString());
 
 const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 
-const username = os.userInfo().username;
+var username = os.userInfo().username;
 
 var config = {
     ProjectName: "FSD", // kinda useless
@@ -219,7 +238,8 @@ function updatePlatPathVariables() {
     );
 }
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
-updateConfig();
+if (process.getuid() != 0)
+    updateConfig();
 function updateConfig(forceNew = false) {
     if (fs.existsSync(configPath) && !forceNew) {
         var tempconfig = fs.readFileSync(configPath);
@@ -269,6 +289,12 @@ function updateConfig(forceNew = false) {
                 .replace(/{me}/g, username)
                 .replace(/{mod}/g, config.ModName)
     });
+
+    // config ready, verify
+    if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && !process.argv.find(x => x.includes(`-lbu`))) return consolelog(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
+    if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
+    if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
+    if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPath: ${config.SteamInstall}`);
 }
 
 function logFile(log) {
@@ -683,12 +709,6 @@ async function killDrg() {
     })
 }
 
-// config ready, verify
-if (!fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && !process.argv.find(x => x.includes(`-lbu`))) return consolelog(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
-if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
-if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
-if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPath: ${config.SteamInstall}`);
-
 if (!fs.existsSync(`${__dirname}/../Config/DefaultGame.ini`)) return consolelog(`Couldnt find Config/DefaultGame.ini`);
 
 var children = [];
@@ -715,10 +735,11 @@ fs.writeFileSync(config.logs, ``);
 if (module.parent) return; // required as a module
 
 (async () => {
-
     if (process.getuid() == 0) {
-        consolelog(`Refusing to run as root`);
-        return exitHandler();
+        consolelog(`Running as root`);
+        username = getUsername();
+        consolelog(`User: ${chalk.cyan(username)}`);
+        updateConfig();
     }
     if (config.update) await update();
 
@@ -749,7 +770,7 @@ if (module.parent) return; // required as a module
                 return fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`);
             },
         },
-        { // shows backups which you can load and delete
+        { // shows backups which you can load
             name: `list backups`,
             color: `#0328fc`,
             run: () => {
@@ -877,8 +898,9 @@ if (module.parent) return; // required as a module
             selectedOptions = selectedOptions.filter(x => x.hidden ? x.hidden() : true);
             var selectedOption = selectedOptions[selected];
             //console.log(key);
-            //qconsolelog(k);
+            //consolelog(k);
             switch (k) {
+                case `w`:
                 case `up`:
                     subS();
                     while (!selectedOptions[selected].run) {
@@ -891,6 +913,7 @@ if (module.parent) return; // required as a module
                             selected--;
                     }
                     break;
+                case `s`:
                 case `down`:
                     addS();
                     while (!selectedOptions[selected].run) {
@@ -903,22 +926,22 @@ if (module.parent) return; // required as a module
                             selected++;
                     }
                     break;
+                case `a`:
                 case `left`: // up -
                     if (logPush > 0)
                         logPush--;
                     break;
+                case `d`:
                 case `right`: // down +
                     if (logHistory.length > logPush)
                         logPush++;
                     break;
+                case `space`:
                 case `return`:
                     var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color))(dyn(selectedOption.name)) : dyn(selectedOption.name);
                     if (selectedOption && selectedOption.run) {
-                        if (selectedOption.running) {
+                        if (!selectedOption.running) {
                             // canceling processes would be sick
-                            consolelog(`Already running ${name}`);
-                        } else {
-                            logHistory = [];
                             //consolelog(`Running ${name}...`);
                             var run = selectedOption.run();
                             if (String(run) == `[object Promise]`) {
@@ -928,14 +951,15 @@ if (module.parent) return; // required as a module
                                     draw();
                                 });
                             }
-                        }
+                        } //else consolelog(`Already runing command for ${name}`);
                     } else consolelog(`No run command for ${name}`);
                     break;
                 case `q`:
                     return exitHandler();
-                case `C`:
+                case `C`: // for butter/fat fingers
                 case `c`:
                     if (key.ctrl) return exitHandler();
+                    else cook();
                     break;
             }
             draw();
@@ -1178,16 +1202,6 @@ if (module.parent) return; // required as a module
                     }*/
                     if (config.backup.onCompile) await backup();
                     if (config.startDRG) await startDrg();
-
-                    // clear swap, can couse crashes couse it just piles up after compiles for some reason? Requires root
-                    /*if (config.ClearSwap || os.freemem() / os.totalmem() > .5) {
-                        consolelog(`Clearing swap... ${Math.floor(os.freemem() / os.totalmem() * 100)}%`);
-                        await new Promise(r =>
-                            child.exec(`swapoff -a && swapon -a && sync; echo 3 > /proc/sys/vm/drop_caches`).on(`close`, () => {
-                                consolelog(`Swap cleared.`);
-                                r();
-                            }));
-                    }*/
 
                     consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
                     r();
