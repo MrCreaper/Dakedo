@@ -6,6 +6,8 @@ A compiler that runs and is nice
 
 Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPACE to select.
 
+p.s `ctrl+c` = abort. So please use `q` or the quit option.
+
 ## Config
 
 ```yaml
@@ -15,7 +17,7 @@ Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPAC
     ProjectFile: `/../FSD.uproject`,
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: ``,
-    SteamInstall: ``,
+    drg: ``,
     CookingCmd: ``,
     PackingCmd: ``,
     UnPackingCmd: ``,
