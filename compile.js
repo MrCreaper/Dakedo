@@ -139,7 +139,7 @@ function getUsername() {
 }
 var utcNow = new Date(new Date().toUTCString());
 
-const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C
+const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 
 var username = os.userInfo().username;
@@ -154,7 +154,8 @@ var config = {
     CookingCmd: ``,
     PackingCmd: ``,
     UnPackingCmd: ``,
-    logs: "./logs.txt", // empty for no logs
+    logs: `./logs.txt`, // empty for no logs
+    externalLog: `{drg}/FSD/Mods/logs.txt`, // shows new logs from another file
     startDRG: false,
     killDRG: true,
     logConfig: false,
@@ -238,7 +239,7 @@ function updatePlatPathVariables() {
     );
 }
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
-if (process.getuid() != 0)
+if (process.getuid() != 0) // not running as root
     updateConfig();
 function updateConfig(forceNew = false) {
     if (fs.existsSync(configPath) && !forceNew) {
@@ -281,10 +282,11 @@ function updateConfig(forceNew = false) {
     writeConfig(unVaredConfig);
     const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
     if (tempModName) config.ModName = tempModName;
-    Object.keys(paths).forEach(x => {
+    Object.keys(config/*paths*/).forEach(x => {
         if (typeof config[x] == `string`)
             config[x] = config[x]
                 .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
+                .replace(/{drg}/g, config.SteamInstall)
                 //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
                 .replace(/{me}/g, username)
                 .replace(/{mod}/g, config.ModName)
@@ -295,6 +297,18 @@ function updateConfig(forceNew = false) {
     if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
     if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
     if (!fs.existsSync(config.SteamInstall)) return consolelog(`Couldnt find drg\nPath: ${config.SteamInstall}`);
+
+    if (config.externalLog)
+        if (!fs.existsSync(config.externalLog))
+            consolelog(`Invalid externalLog ${config.externalLog}`);
+        else {
+            var externalLogsStart = fs.readFileSync(config.externalLog).length;
+            fs.watchFile(config.externalLog, (curr, prev) => {
+                var read = fs.readFileSync(config.externalLog).toString();
+                consolelog(chalk.cyan(read.slice(externalLogsStart)));
+                externalLogsStart = read.length;
+            });
+        }
 }
 
 function logFile(log) {
@@ -745,12 +759,12 @@ if (module.parent) return; // required as a module
 
     var options = [
         {
-            name: `cook`,
+            name: (self) => self.running == undefined ? `cook` : self.running == false ? `cooked` : `cooking`,
             color: `#00ff00`,
             run: cook,
         },
         {
-            name: `publish`,
+            name: (self) => self.running == undefined ? `publish` : self.running == false ? `published` : `publishing`,
             color: `#00FFFF`,
             run: publish,
             hidden: () => {
@@ -872,7 +886,7 @@ if (module.parent) return; // required as a module
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
-            name: `drg`,
+            name: (self) => self.running == undefined ? `drg` : self.running == false ? `launching` : `launched`,
             color: `#ffa500`,
             run: startDrg,
         },
@@ -883,8 +897,9 @@ if (module.parent) return; // required as a module
         },
         /*{
             name: `log`,
-            color: `#ff0000`,
-            run: () => consolelog(`AAA`),
+            color: `#ffffff`,
+            run: () => consolelog(`AAA ${logHistory.length}`), // remember that the log limit is 100
+            hidden: () => !process.pkg,
         },*/
     ];
     var selectedOptions = options;
@@ -938,12 +953,12 @@ if (module.parent) return; // required as a module
                     break;
                 case `space`:
                 case `return`:
-                    var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color))(dyn(selectedOption.name)) : dyn(selectedOption.name);
+                    var name = selectedOption.color ? chalk.hex(dyn(selectedOption.color, selectedOption))(dyn(selectedOption.name, selectedOption)) : dyn(selectedOption.name, selectedOption);
                     if (selectedOption && selectedOption.run) {
                         if (!selectedOption.running) {
                             // canceling processes would be sick
                             //consolelog(`Running ${name}...`);
-                            var run = selectedOption.run();
+                            var run = selectedOption.run(selectedOption);
                             if (String(run) == `[object Promise]`) {
                                 selectedOption.running = true;
                                 run.then(() => {
@@ -966,21 +981,29 @@ if (module.parent) return; // required as a module
         });
         //setInterval(draw, 100);
         draw();
-        function dyn(a) { // dynamic
-            return typeof a == `function` ? a() : a;
+        function dyn(a, arg) { // dynamic
+            return typeof a == `function` ? a(arg) : a;
         }
         consoleloge.on('log', log => draw());
         function draw(clean = false, options = selectedOptions) {
             options = options.filter(x => x.hidden ? x.hidden() : true);
             var longestOption = 0;
             options.forEach(x => {
-                var l = removeColor(dyn(x.name)).length;
+                var l = removeColor(dyn(x.name, x)).length;
                 if (longestOption < l) longestOption = l;
             });
             console.clear();
 
+            function wrapCount(int = ``, at = process.stdout.columns) {
+                return Math.floor(int.length / at);
+            }
+            var wraps = 0;
+            var logs = logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0) + logPush);
+            logs.forEach((x, i) => wraps += wrapCount(x));
+            logs = logs.slice(-wraps);
+
             // bg logs
-            logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0) + logPush).forEach((x, i) => {
+            logs.forEach((x, i) => {
                 process.stdout.cursorTo(0, /*process.stdout.rows - 2 - */i);
                 switch (typeof x) {
                     case `object`:
@@ -998,17 +1021,9 @@ if (module.parent) return; // required as a module
 
             // options
             options.forEach((x, i) => {
-                var name = dyn(x.name);
-                switch (name) {
-                    case `cook`: logPush
-                    case `publish`:
-                    case `backup`:
-                        if (x.running) name += `ing`;
-                        if (x.running == false) name += `ed`;
-                        break;
-                }
-                var nameNC = removeColor(dyn(name))
-                var nameC = x.color ? chalk.hex(dyn(x.color))(name) : name; // color if there is a name
+                var name = dyn(x.name, x);
+                var nameNC = removeColor(name)
+                var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
                 var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
                 var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
                 var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
