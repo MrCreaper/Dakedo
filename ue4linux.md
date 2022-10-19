@@ -2,11 +2,11 @@
 
 ## [Native](https://docs.unrealengine.com/4.27/en-US/SharingAndReleasing/Linux/BeginnerLinuxDeveloper/SettingUpAnUnrealWorkflow/) pros and cons
 
-### pros
+### Pros
 
 - native speed
 
-### cons
+### Cons
 
 - a bit more work to setup
   - download, compile

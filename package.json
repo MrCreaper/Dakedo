@@ -4,8 +4,6 @@
   "description": "",
   "main": "compile.js",
   "scripts": {
-    "verify": "node . -verify",
-    "publish": "node . -publish",
     "pack": "pkg compile.js --no-warnings --compress Brotli",
     "pkg": "npm run pack && ./compile-linux"
   },

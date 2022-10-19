@@ -155,7 +155,7 @@ var config = {
     PackingCmd: ``,
     UnPackingCmd: ``,
     logs: `./logs.txt`, // empty for no logs
-    externalLog: `{drg}/FSD/Mods/logs.txt`, // shows new logs from another file
+    externalLog: ``, // show new logs from another file
     startDRG: false,
     killDRG: true,
     logConfig: false,

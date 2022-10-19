@@ -19,7 +19,8 @@ Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPAC
     CookingCmd: ``,
     PackingCmd: ``,
     UnPackingCmd: ``,
-    logs: "./logs.txt", // empty for no logs
+    logs: `./logs.txt`, // empty for no logs
+    externalLog: ``, // show new logs from another file
     startDRG: false,
     killDRG: true,
     logConfig: false,
@@ -49,36 +50,36 @@ Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPAC
 
 ## Compiler Options
 
-If you are too cool for the UI you can use options. Using any options on startup disables ui.
-Options require a "-" prefix (example: `./compile -drg` will toggle drg config)
+If you are too cool for the UI you can use options. Using any options disables ui.
 
-- verify (verifies settings, prob)
+- -verify (verifies settings, prob)
 - {mod name} (just adding a mod name will set it as the ModName for the compile)
-- drg (toggles startDRG)
-- bu (backups)
-- lbu{id} (loads backup, exclude id to unload backup)
-- listbu (lists backups)
+- -drg (toggles startDRG)
+- -bu (backups)
+- -lbu{id} (loads backup, exclude id to unload backup)
+- -listbu (lists backups)
 - {pak file} (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
-- unpackdrg (unpacks drg)
-- publish (publishes version to modio)
-- export (uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else)
-- exportFlat (same as above but flattens textures to a single folder)
+- -unpackdrg (unpacks drg)
+- -publish (publishes version to modio)
+- -export (uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else)
+- -exportFlat (same as above but flattens textures to a single folder)
 
 No "clear backups" command, you clear that on your own. Your tears.
 
 ## Install
 
-1. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases/latest) of this (unless you wana run it raw with node) and add to the project folder, **IN ITS OWN SPECIAL LITTLE FOLDER**
+1. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases/latest)
+2. Make the folder hieracy something like this (or u know edit the config ¯\\\_(ツ)\_/¯)
+   - FSD
+     - FSD.uproject
+     - compiler
+       - compiler.exe
 
-- (optional) make a link to the compiler :)
-
-2. Run for first time setup
-
-- Setup config.json
+3. Skim over/setup the config.json
 
 ### development
 
-Build w/[pkg](https://www.npmjs.com/package/pkg)
+Build with `npm run pkg`
 
 [umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
 
