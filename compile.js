@@ -405,7 +405,7 @@ module.exports.uploadMod = uploadMod = async (
         if (fs.statSync(zip).size > 5368709120) return consolelog(`Zip bigger then 5gb`);
         var body = {
             //filedata: `@${zip}`,
-            filedata: fs.readFileSync(zip),
+            filedata: fs.readFileSync(zip, `binary`),
             //filehash: crypto.createHash('md5').update(fs.readFileSync(zip, `binary`)).digest('hex'),
             //version: version,
             //active: active,
@@ -1077,6 +1077,8 @@ if (module.parent) return; // required as a module
         }
         consoleloge.on('log', log => {
             fittedLogs = formatLogs();
+            if (fittedLogs.length + logPush > process.stdout.rows)
+                logPush--;
             draw();
         });
         function draw(clean = false, options = selectedOptions) {
