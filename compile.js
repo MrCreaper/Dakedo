@@ -841,12 +841,12 @@ if (module.parent) return; // required as a module
 
     var options = [
         {
-            name: (self) => self.running == undefined ? `cook` : self.running == false ? `cooked` : `cooking`,
+            name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked ${self.running}` : `cooking`),
             color: `#00ff00`,
             run: cook,
         },
         {
-            name: (self) => self.running == undefined ? `publish` : self.running == false ? `published` : `publishing`,
+            name: (self) => self.running == undefined ? `publish` : (self.running == false ? `published` : `publishing`),
             color: `#00FFFF`,
             run: publish,
             hidden: () => {
@@ -968,7 +968,7 @@ if (module.parent) return; // required as a module
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
-            name: `drg`,
+            name: (self) => self.running == undefined ? `drg` : self.running == false ? `drg` : `launching...`,
             color: `#ffa500`,
             run: startDrg,
         },
@@ -993,6 +993,7 @@ if (module.parent) return; // required as a module
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
         var lastPressKey = ``;
         var lastPressDate = 0;
+        var selecting = false;
         process.stdin.on('keypress', (chunk, key) => {
             var k = key.name || key.sequence;
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
@@ -1046,6 +1047,7 @@ if (module.parent) return; // required as a module
                         if (!selectedOption.running) {
                             // canceling processes would be sick
                             //consolelog(`Running ${name}...`);
+                            selecting = true;
                             var run = selectedOption.run(selectedOption);
                             if (String(run) == `[object Promise]`) {
                                 selectedOption.running = true;
@@ -1116,15 +1118,19 @@ if (module.parent) return; // required as a module
                     process.stdout.write(opt);
                 });
 
-                process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
-                process.stdout.write(String(logPush));
+                if (logPush) {
+                    process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
+                    process.stdout.write(chalk.gray(String(logPush)));
+                }
 
                 // selection arrows
                 var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
-                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 1, y);
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0), y);
                 process.stdout.write(`>`);
-                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5), y);
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0), y);
                 process.stdout.write(`<`);
+                if (selecting) setTimeout(() => draw(), 200);
+                selecting = false;
             }
 
             // latest log
