@@ -20,19 +20,54 @@ var logHistory = [];
  * @param {boolean} urgent Used for logging very important stuff as module
  * @returns {intreger} logHistory index
  */
-function consolelog(log = ``, urgent = false) {
+function consolelog(log = ``, urgent = false, save = true) {
     if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
     if (!log && log != 0) return;
+    switch (typeof log) {
+        case `object`:
+            log = JSON.stringify(log, null, 4);
+            break;
+        case `function`:
+            log = `Function: ${log.name}`;
+            break;
+    }
     latestLog = log;
     var i = logHistory.push(log);
     while (logHistory.length > 100) {
         logHistory.pop();
     }
     consoleloge.emit(`log`, log);
-    logFile(`${log}\n`);
+    if (save)
+        logFile(`${log}\n`);
     return i;
+}
+
+var fittedLogs = [];
+function formatLogs(rawlogs = logHistory) {
+    var logs = [];
+    // split multiple line logs
+    rawlogs.forEach(x => logs = logs.concat(x.split(`\n`)));
+
+    logs = wrapLogs(logs);
+    function wrapLogs(logs = []) {
+        var out = [];
+        logs.forEach(x => {
+            var log = String(x);
+            while (log.length > process.stdout.columns) {
+                out.push(log.slice(0, process.stdout.columns));
+                log = log.slice(process.stdout.columns);
+            }
+            out.push(log);
+        });
+        return out;
+    }
+    return logs;
+}
+
+function filterOffScreenLogs(logs, push = 0) {
+    return logs.filter((x, i) => i + push > -1 && !(i + push >= process.stdout.rows));
 }
 
 function formatTime(time) {
@@ -139,13 +174,13 @@ function getUsername() {
 }
 var utcNow = new Date(new Date().toUTCString());
 
-const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
+const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine
 
 var username = os.userInfo().username;
 
 var config = {
-    ProjectName: "FSD", // kinda useless
+    ProjectName: "FSD",
     ModName: findModName(),
     ProjectFile: `/../FSD.uproject`,
     DirsToCook: [], // folder named after ModName is automaticlly included
@@ -161,10 +196,12 @@ var config = {
     logConfig: false,
     ui: true, // use the ui version by default
     backup: {
+        folder: `./backups`, // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
         blacklist: [`.git`],
+        //all: false, // backup the entire project
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
@@ -186,22 +223,22 @@ const originalplatformPaths = {
     win: {
         UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
         drg: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-        PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe ${__dirname}/temp/{mod}.pak -Create="${__dirname}/temp/Input.txt`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor`,
+        PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/temp/{mod}.pak -Create="{dir}/temp/Input.txt`,
         UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
     },
     linux: {
         UnrealEngine: `/home/{me}/Documents/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd ${__dirname}${config.ProjectFile} -run=cook -targetplatform=WindowsNoEditor`,
-        PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak ${__dirname}/temp/{mod}.pak -Create="${__dirname}/temp/Input.txt"`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor`,
+        PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/temp/{mod}.pak -Create="{dir}/temp/Input.txt"`,
         UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
     },
     linuxwine: {
         UnrealEngine: `/home/{me}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "${W__dirname}${config.ProjectFile}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
-        PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "${W__dirname}/temp/{mod}.pak" "-Create="${W__dirname}/temp/Input.txt""`,
+        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
+        PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/temp/{mod}.pak" "-Create="{dir}/temp/Input.txt""`,
         UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}"`,
     },
     macos: {
@@ -283,13 +320,21 @@ async function updateConfig(forceNew = false) {
     const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${__dirname}/../Content/${x}`));
     if (tempModName) config.ModName = tempModName;
     Object.keys(config/*paths*/).forEach(x => {
-        if (typeof config[x] == `string`)
+        if (typeof config[x] == `string`) {
             config[x] = config[x]
                 .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
                 .replace(/{drg}/g, config.drg)
                 //.replace(/.\//g, `${plat.includes(`wine`) ? W__dirname : __dirname}/`)
                 .replace(/{me}/g, username)
                 .replace(/{mod}/g, config.ModName)
+                .replace(/{pf}/g, config.ProjectFile);
+            if (platform == `linuxwine`)
+                config[x] = config[x]
+                    .replace(/{dir}/g, W__dirname); // better to use "{dir}" then "./" since this is running over all configs :)
+            else
+                config[x] = config[x]
+                    .replace(/{dir}/g, __dirname);
+        }
     });
 
     // config ready, verify
@@ -326,9 +371,11 @@ async function updateConfig(forceNew = false) {
         else {
             var externalLogsStart = fs.readFileSync(config.externalLog).toString().length;
             fs.watchFile(config.externalLog, async (curr, prev) => {
-                var read = fs.readFileSync(config.externalLog).toString().slice(externalLogsStart); // so much simpler but whatever
+                if (!fs.existsSync(config.externalLog)) return consolelog(`Failed to read externallog? Its probably fine...`);
+                var read = fs.readFileSync(config.externalLog).toString().slice(externalLogsStart).replace(/ /g, ``).replace(/[^\x00-\x7F]/g, ""); // so much simpler but whatever
                 externalLogsStart += read.length;
-                consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read)); // remove starting new line and header
+                //consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read), undefined, false); // remove starting new line and header
+                read.split(`\n`).forEach(x => consolelog(chalk.cyan(x)));
                 /*var log = await readAt(config.externalLog, externalLogsStart); // I just had to worry about non-existent 50gb log files of all things :\
                 consolelog(chalk.cyan(log.startsWith(`\n`) ? log.replace(`\n`, ``) : log));
                 if (log.length)`
@@ -340,7 +387,8 @@ async function updateConfig(forceNew = false) {
 }
 
 function logFile(log) {
-    fs.appendFileSync(config.logs, removeColor(log))
+    if (config && config.logs)
+        fs.appendFileSync(config.logs, removeColor(log))
 }
 
 // exports
@@ -357,14 +405,14 @@ module.exports.uploadMod = uploadMod = async (
         if (fs.statSync(zip).size > 5368709120) return consolelog(`Zip bigger then 5gb`);
         var body = {
             //filedata: `@${zip}`,
-            filedata: fs.readFileSync(zip, `binary`),
+            filedata: fs.readFileSync(zip),
             //filehash: crypto.createHash('md5').update(fs.readFileSync(zip, `binary`)).digest('hex'),
-            version: version,
+            //version: version,
             //active: active,
-            changelog: changelog,
+            //changelog: changelog,
             //metadata_blob: meta,
         };
-        /*var res = await fetch(`http://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
+        /*var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${config.modio.token}`,
@@ -372,10 +420,18 @@ module.exports.uploadMod = uploadMod = async (
                 'Accept': 'application/json',
             },
             body: JSON.stringify(body),
-        });*/
+        });
+        //consolelog(body.filedata);
+        res = await res.json();
+        if (res.error)
+            consolelog(res.error);
+        else
+            consolelog(res);
+        if (res.status == 201)
+            r(true);
+        else r(res);
+        return;*/
         const https = require('https');
-
-        var postData = JSON.stringify(body);
 
         var options = {
             hostname: 'api.mod.io',
@@ -386,31 +442,30 @@ module.exports.uploadMod = uploadMod = async (
                 'Authorization': `Bearer ${config.modio.token}`,
                 'Content-Type': 'multipart/form-data',
                 'Accept': 'application/json',
-            }
+            },
         };
 
         var req = https.request(options, (res) => {
-            console.log('statusCode:', res.statusCode);
-            console.log('headers:', res.headers);
+            consolelog(`statusCode: ${res.statusCode}`);
+            consolelog(`headers:`);
+            consolelog(res.headers);
 
-            res.on('data', (d) =>
+            res.on('data', (d) => {
                 //process.stdout.write
-                consolelog(String(d))
-            );
+                consolelog(`Response:`);
+                consolelog(JSON.parse(String(d)));
+                r(JSON.parse(String(d)));
+            });
         });
 
         req.on('error', (e) => {
+            consolelog(`Error publishing:`);
             consolelog(e);
+            r(e);
         });
 
-        req.write(postData);
+        req.write(JSON.stringify(body));
         req.end();
-        //consolelog(body.filedata);
-        /*res = await res.json();
-        if (res.error) consolelog(res);
-        if (res.status == 201)
-            r(true);
-        else r(res);*/
     })
 };
 
@@ -511,8 +566,6 @@ module.exports.backup = backup = function () {
     return new Promise(async r => {
         try {
             consolelog(`Making backup...`);
-            if (!fs.existsSync(`${__dirname}/backups`))
-                fs.mkdirSync(`${__dirname}/backups`);
             if (config.backup.max != -1) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
@@ -915,7 +968,7 @@ if (module.parent) return; // required as a module
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
-            name: (self) => self.running == undefined ? `drg` : self.running == false ? `launching` : `launched`,
+            name: `drg`,
             color: `#ffa500`,
             run: startDrg,
         },
@@ -924,21 +977,27 @@ if (module.parent) return; // required as a module
             color: `#ff0000`,
             run: exitHandler,
         },
-        /*{
+        {
             name: `log`,
             color: `#ffffff`,
             run: () => consolelog(`AAA ${logHistory.length}`), // remember that the log limit is 100
             hidden: () => !process.pkg,
-        },*/
+        },
     ];
     var selectedOptions = options;
     var selected = 0;
     var logPush = 0;
+    var logMode = false;
     if (config.ui && process.argv.length == 2) {
         readline.emitKeypressEvents(process.stdin);
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
+        var lastPressKey = ``;
+        var lastPressDate = 0;
         process.stdin.on('keypress', (chunk, key) => {
             var k = key.name || key.sequence;
+            const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
+            lastPressKey = k;
+            lastPressDate = new Date();
             selectedOptions = selectedOptions.filter(x => x.hidden ? x.hidden() : true);
             var selectedOption = selectedOptions[selected];
             //console.log(key);
@@ -971,13 +1030,13 @@ if (module.parent) return; // required as a module
                     }
                     break;
                 case `a`:
-                case `left`: // up -
-                    if (logPush > 0)
+                case `left`: // down -
+                    if (fittedLogs.length > Math.abs(logPush - 1))
                         logPush--;
                     break;
                 case `d`:
-                case `right`: // down +
-                    if (logHistory.length > logPush)
+                case `right`: // up +
+                    if (logPush + 1 <= 0)
                         logPush++;
                     break;
                 case `space`:
@@ -1005,6 +1064,9 @@ if (module.parent) return; // required as a module
                     if (key.ctrl) return process.exit();
                     else cook();
                     break;
+                case `tab`:
+                    logMode = !logMode;
+                    break;
             }
             draw();
         });
@@ -1013,61 +1075,55 @@ if (module.parent) return; // required as a module
         function dyn(a, arg) { // dynamic
             return typeof a == `function` ? a(arg) : a;
         }
-        consoleloge.on('log', log => draw());
+        consoleloge.on('log', log => {
+            fittedLogs = formatLogs();
+            draw();
+        });
         function draw(clean = false, options = selectedOptions) {
-            options = options.filter(x => x.hidden ? x.hidden() : true);
-            var longestOption = 0;
-            options.forEach(x => {
-                var l = removeColor(dyn(x.name, x)).length;
-                if (longestOption < l) longestOption = l;
-            });
+            // clear old drawing
+            for (var i = 0; i < process.stdout.rows; i++) {
+                console.log('\r\n');
+            }
             console.clear();
 
-            function wrapCount(int = ``, at = process.stdout.columns) {
-                return Math.floor(int.length / at);
-            }
-            var wraps = 0;
-            var logs = logHistory.slice(Math.max(logHistory.length - process.stdout.rows, 0) + logPush);
-            logs.forEach((x, i) => wraps += wrapCount(x));
-            logs = logs.slice(-wraps);
-            wraps = 0;
-
             // bg logs
-            logs.forEach((x, i) => {
-                process.stdout.cursorTo(0, /*process.stdout.rows - 2 - */i - wraps);
-                wraps += wrapCount(x);
-                switch (typeof x) {
-                    case `object`:
-                        x = JSON.stringify(x, null, 4);
-                        break;
-                    case `function`:
-                        x = `Function: ${x.name}`;
-                        break;
-                    case `number`:
-                        x = String(x);
-                        break;
-                }
-                process.stdout.write(x);
+            filterOffScreenLogs(fittedLogs, logPush).forEach((x, i) => {
+                process.stdout.cursorTo(0, i);
+                process.stdout.write(String(x));
             });
 
-            // options
-            options.forEach((x, i) => {
-                var name = dyn(x.name, x);
-                var nameNC = removeColor(name)
-                var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
-                var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
-                var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
-                var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
-                process.stdout.cursorTo(X, Y); // x=left/right y=up/down
-                process.stdout.write(opt);
-            });
+            if (!logMode) {
+                // options
+                // filter hidden
+                options = options.filter(x => x.hidden ? x.hidden() : true);
 
-            // selection arrows
-            var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
-            process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 1, y);
-            process.stdout.write(`>`);
-            process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5), y);
-            process.stdout.write(`<`);
+                var longestOption = 0;
+                options.forEach(x => {
+                    var l = removeColor(dyn(x.name, x)).length;
+                    if (longestOption < l) longestOption = l;
+                });
+
+                options.forEach((x, i) => {
+                    var name = dyn(x.name, x);
+                    var nameNC = removeColor(name)
+                    var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
+                    var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
+                    var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
+                    var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
+                    process.stdout.cursorTo(X, Y); // x=left/right y=up/down
+                    process.stdout.write(opt);
+                });
+
+                process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
+                process.stdout.write(String(logPush));
+
+                // selection arrows
+                var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 1, y);
+                process.stdout.write(`>`);
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5), y);
+                process.stdout.write(`<`);
+            }
 
             // latest log
             //process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - latestLog.length * .5), process.stdout.rows - 2);
@@ -1080,6 +1136,7 @@ if (module.parent) return; // required as a module
     }
 
     if (process.argv.includes(`-verify`)) return;
+    if (process.argv.includes(`-publish`)) return publish();
     //if (process.argv.includes(`-help`)) return consolelog(``);
 
     if (process.argv.includes(`-gogo`)) {
@@ -1189,16 +1246,17 @@ if (module.parent) return; // required as a module
         return new Promise(async r => {
             consolelog(`Publising...`);
             var madeZip = false;
-            if (!fs.existsSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`)) {
-                await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, `${config.drg}/FSD/Mods/${config.ModName}.zip`);
+            var zip = `${config.drg}/FSD/Mods/${config.ModName}.zip`;
+            if (!fs.existsSync(zip)) {
+                await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, zip);
                 madeZip = true;
             }
-            var res = await uploadMod();
+            var res = await uploadMod(zip);
             if (res != true)
-                consolelog(`Failed ${res.status}: ${res.statusText}`);
+                consolelog(`Failed to publish`);
             else consolelog(`Published!`);
             if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
-            r();
+            r(res == true);
         })
     }
     if (process.argv.includes(`-onlypublish`))
@@ -1213,7 +1271,7 @@ if (module.parent) return; // required as a module
                 fs.rmSync(`${__dirname}/temp/`, { recursive: true, force: true });
             fs.mkdirSync(`${__dirname}/temp/`);
             fs.writeFileSync(`${__dirname}/temp/Input.txt`, `"${W__dirname}/temp/PackageInput/" "../../../FSD/"`);
-            if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return consolelog(`Cook didnt cook anything :|`);
+            if (!fs.existsSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`));
             fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/temp/PackageInput/Content/`, { overwrite: true });
             fs.moveSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
@@ -1241,7 +1299,7 @@ if (module.parent) return; // required as a module
                         );
                     }
 
-                    if (process.argv.includes(`-publish`) || config.modio.onCompile) publish();
+                    if (config.modio.onCompile) publish();
                     /*if(config.modio.deleteOther){
                         var files = await getFiles();
                         files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object

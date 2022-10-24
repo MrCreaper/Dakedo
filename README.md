@@ -4,7 +4,8 @@ A compiler that runs and is nice
 
 ## UI
 
-Move with UP/W and DOWN/S, LEFT/A and RIGHT/D to move logs and ENTER/RETURN/SPACE to select.
+Move with `up`/`w` and `down`/`s`, `left`/`a` and `right`/`d` to move logs and `enter`/`return`/`space` to select.
+`tab` to go to "logMode", which just hides the options and lets you focus on the logs.
 
 p.s `ctrl+c` = abort. So please use `q` or the quit option.
 
