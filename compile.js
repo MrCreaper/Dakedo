@@ -7,6 +7,7 @@ const os = require(`os`);
 const chalk = require(`chalk`);
 const zl = require("zip-lib");
 var crypto = require('crypto');
+var FormData = require('form-data');
 const readline = require(`readline`);
 const { EventEmitter } = require(`events`);
 class Emitter extends EventEmitter { }
@@ -398,6 +399,20 @@ function logFile(log) {
 // exports
 module.exports.config = config;
 
+function ObjectToForm(obj = {}) {
+    var form = new FormData();
+    Object.keys(obj).forEach(key => {
+        var val = obj[key];
+        switch (typeof val) {
+            case `boolean`:
+                val = String(val);
+                break;
+        }
+        form.append(key, val);
+    });
+    return form;
+}
+
 module.exports.uploadMod = uploadMod = async (
     zip = `${__dirname}/${config.ModName}.zip`, // mods folder one dosent have permission so maybe not? `${config.drg}/FSD/Mods/${config.ModName}.zip`
     active = true,
@@ -408,34 +423,14 @@ module.exports.uploadMod = uploadMod = async (
     return new Promise(async (r, re) => {
         if (fs.statSync(zip).size > 5368709120) return consolelog(`Zip bigger then 5gb`);
         var body = {
-            //filedata: `@${zip}`,
-            filedata: fs.readFileSync(zip, `binary`),
-            //filehash: crypto.createHash('md5').update(fs.readFileSync(zip, `binary`)).digest('hex'),
-            //version: version,
-            //active: active,
-            //changelog: changelog,
-            //metadata_blob: meta,
+            filedata: fs.createReadStream(zip),
+            filehash: crypto.createHash('md5').update(fs.readFileSync(zip)).digest('hex'),
+            version: version,
+            active: active,
+            changelog: changelog,
+            metadata_blob: meta,
         };
-        /*var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`, { // actually HTTP
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${config.modio.token}`,
-                'Content-Type': 'multipart/form-data',
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify(body),
-        });
-        //consolelog(body.filedata);
-        res = await res.json();
-        if (res.error)
-            consolelog(res.error);
-        else
-            consolelog(res);
-        if (res.status == 201)
-            r(true);
-        else r(res);
-        return;*/
-        const https = require('https');
+        var form = ObjectToForm(body);
 
         var options = {
             hostname: 'api.mod.io',
@@ -444,21 +439,22 @@ module.exports.uploadMod = uploadMod = async (
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${config.modio.token}`,
-                'Content-Type': 'multipart/form-data',
+                ...form.getHeaders(),
                 'Accept': 'application/json',
             },
         };
 
         var req = https.request(options, (res) => {
-            consolelog(`statusCode: ${res.statusCode}`);
-            consolelog(`headers:`);
-            consolelog(res.headers);
-
-            res.on('data', (d) => {
-                //process.stdout.write
-                consolelog(`Response:`);
-                consolelog(JSON.parse(String(d)));
-                r(JSON.parse(String(d)));
+            var data = [];
+            res.on('data', (d) => data.push(d));
+            req.on(`close`, () => {
+                var buffer = Buffer.concat(data);
+                var resp = JSON.parse(buffer.toString());
+                if (resp.error) {
+                    consolelog(resp.error);
+                    r(false);
+                } else if (res.statusCode == 201)
+                    r(resp);
             });
         });
 
@@ -468,8 +464,8 @@ module.exports.uploadMod = uploadMod = async (
             r(e);
         });
 
-        req.write(JSON.stringify(body));
-        req.end();
+        form.pipe(req)
+            .on(`close`, () => req.end());
     })
 };
 
@@ -1301,9 +1297,9 @@ if (module.parent) return; // required as a module
                 madeZip = true;
             }
             var res = await uploadMod(zip);
-            if (res != true)
+            if (!res.filename)
                 consolelog(`Failed to publish`);
-            else consolelog(`Published!`);
+            else consolelog(`Published! ${chalk.cyan(res.filename)}`);
             if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
             r(res == true);
         })
