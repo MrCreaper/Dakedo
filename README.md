@@ -15,15 +15,15 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 {
     ProjectName: "FSD",
     ModName: findModName(),
-    ProjectFile: `/../FSD.uproject`,
+    ProjectFile: "/../FSD.uproject",
     DirsToCook: [], // folder named after ModName is automaticlly included
-    UnrealEngine: ``, // auto generated
-    drg: ``, // auto generated
-    CookingCmd: ``, // auto generated
-    PackingCmd: ``, // auto generated
-    UnPackingCmd: ``, // auto generated
-    logs: `./logs.txt`, // empty for no logs
-    externalLog: ``, // show new logs from another file
+    UnrealEngine: "", // auto generated
+    drg: "", // auto generated
+    CookingCmd: "", // auto generated
+    PackingCmd: "", // auto generated
+    UnPackingCmd: "", // auto generated
+    logs: "./logs.txt", // empty for no logs
+    externalLog: "", // show new logs from another file
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
     logConfig: false, // only on cmd version
@@ -33,28 +33,28 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
         cleanSelected: false, // clean logs only between selection arrows
         shortcuts: [
             /*{
-                name: `cook & publish`, // display name
-                color: `00f0f0`, // hex color
-                run: `cook,publish`, // functions
+                name: "cook & publish", // display name
+                color: "00f0f0", // hex color
+                run: "cook,publish", // functions
                 index: 2, // index on list
             },*/
         ],
     },
     backup: {
-        folder: `./backups`, // leave empty
+        folder: "./backups", // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
-        blacklist: [`.git`],
+        blacklist: [".git"],
         //all: false, // backup the entire project
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: [`./`], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: ["./"], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
-        token: ``, // https://mod.io/me/access > oauth access
+        token: "", // https://mod.io/me/access > oauth access
         gameid: 2475, // DRG
         modid: 0, // aka "Resource ID"
         onCompile: false, // upload on compile
