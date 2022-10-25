@@ -416,7 +416,7 @@ function ObjectToForm(obj = {}) {
 module.exports.uploadMod = uploadMod = async (
     zip = `${__dirname}/${config.ModName}.zip`, // mods folder one dosent have permission so maybe not? `${config.drg}/FSD/Mods/${config.ModName}.zip`
     active = true,
-    version = config.modio.dateVersion ? `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth()}.${utcNow.getUTCDate()}` : findModVersion(),
+    version = config.modio.dateVersion ? `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth() + 1}.${utcNow.getUTCDate()}` : findModVersion(),
     changelog = `Uploaded: ${utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, '')} UTC`,
     meta = ``,
 ) => {
@@ -1343,7 +1343,7 @@ if (module.parent) return; // required as a module
             var res = await uploadMod(zip);
             if (!res.filename)
                 consolelog(`Failed to publish`);
-            else consolelog(`Published! ${chalk.cyan(res.filename)}`);
+            else consolelog(`Published! ${chalk.cyan(res.version ? `v${res.version}` : res.filename)}`);
             if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
 
             if (config.modio.deleteOther) {
