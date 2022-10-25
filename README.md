@@ -11,28 +11,42 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 
 ## Config
 
-```yaml
+```json
 {
-    ProjectName: "FSD", // kinda useless
+    ProjectName: "FSD",
     ModName: findModName(),
     ProjectFile: `/../FSD.uproject`,
     DirsToCook: [], // folder named after ModName is automaticlly included
-    UnrealEngine: ``,
-    drg: ``,
-    CookingCmd: ``,
-    PackingCmd: ``,
-    UnPackingCmd: ``,
+    UnrealEngine: ``, // auto generated
+    drg: ``, // auto generated
+    CookingCmd: ``, // auto generated
+    PackingCmd: ``, // auto generated
+    UnPackingCmd: ``, // auto generated
     logs: `./logs.txt`, // empty for no logs
     externalLog: ``, // show new logs from another file
-    startDRG: false,
-    killDRG: true,
-    logConfig: false,
-    ui: true, // use the ui version by default
+    startDRG: false, // when cooked
+    killDRG: true, // when starting cook
+    logConfig: false, // only on cmd version
+    ui: {
+        enabled: true,  // use the ui version by default
+        cleanBox: true, // clean logs around the options
+        cleanSelected: false, // clean logs only between selection arrows
+        shortcuts: [
+            /*{
+                name: `cook & publish`, // display name
+                color: `00f0f0`, // hex color
+                run: `cook,publish`, // functions
+                index: 2, // index on list
+            },*/
+        ],
+    },
     backup: {
+        folder: `./backups`, // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
         blacklist: [`.git`],
+        //all: false, // backup the entire project
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
@@ -41,11 +55,13 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
     },
     modio: {
         token: ``, // https://mod.io/me/access > oauth access
-        gameid: 2475,
-        modid: 0,
+        gameid: 2475, // DRG
+        modid: 0, // aka "Resource ID"
         onCompile: false, // upload on compile
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
+        msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
+        xm: true, // use am/pm or 24h
     },
     update: true, // automaticlly check for updates
 }

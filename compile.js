@@ -15,6 +15,7 @@ const consoleloge = new Emitter();
 
 var latestLog = ``;
 var logHistory = [];
+var logLimit = 100;
 /**
  * Custom log function
  * @param {string} log the log
@@ -39,7 +40,7 @@ function consolelog(log = ``, urgent = false, save = true, event = true) {
     }
     latestLog = log;
     var i = logHistory.push(log);
-    while (logHistory.length > 100) {
+    while (logHistory.length > logLimit) {
         logHistory.shift();
     }
     if (event)
@@ -75,7 +76,7 @@ function filterOffScreenLogs(logs, push = 0) {
     return logs.filter((x, i) => i + push > -1 && !(i + push >= process.stdout.rows));
 }
 
-function formatTime(time) {
+function since(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
     var months = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7 * 31)));
     var weeks = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7)));
@@ -155,6 +156,44 @@ function findModVersion() {
     return raw;
 }
 
+function escapeRegEx(s) {
+    return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+function formatTime(time) {
+    if (config.modio.xm)
+        var timeS = time.split(` `);
+    if (timeS[1])
+        timeS[1] = convertTime(timeS[1]);
+    else timeS[0] = convertTime(timeS[0]);
+    return timeS.join(` `);
+}
+
+function t24hToXM(time) {
+    // Check correct time format and split into components
+    time = time.toString().match(/^([01]\d|2[0-3])(:)([0-5]\d)(:[0-5]\d)?$/) || [time];
+
+    if (time.length > 1) { // If time format correct
+        time = time.slice(1);  // Remove full string match value
+        time[5] = +time[0] < 12 ? 'am' : 'pm'; // Set AM/PM
+        time[0] = +time[0] % 12 || 12; // Adjust hours
+    }
+    return time.join(``); // return adjusted time or original string
+}
+
+function tXMto24h(time) {
+    var hours = Number(time.match(/^(\d+)/)[1]);
+    var minutes = Number(time.match(/:(\d+)/)[1]);
+    var AMPM = time.match(/\s(.*)$/)[1];
+    if (AMPM == "PM" && hours < 12) hours = hours + 12;
+    if (AMPM == "AM" && hours == 12) hours = hours - 12;
+    var sHours = hours.toString();
+    var sMinutes = minutes.toString();
+    if (hours < 10) sHours = "0" + sHours;
+    if (minutes < 10) sMinutes = "0" + sMinutes;
+    return sHours + ":" + sMinutes;
+}
+
 /**
  * Clears swap and ram
  * @param {boolean} force 
@@ -189,25 +228,29 @@ var config = {
     ModName: findModName(),
     ProjectFile: `/../FSD.uproject`,
     DirsToCook: [], // folder named after ModName is automaticlly included
-    UnrealEngine: ``,
-    drg: ``,
-    CookingCmd: ``,
-    PackingCmd: ``,
-    UnPackingCmd: ``,
+    UnrealEngine: ``, // auto generated
+    drg: ``, // auto generated
+    CookingCmd: ``, // auto generated
+    PackingCmd: ``, // auto generated
+    UnPackingCmd: ``, // auto generated
     logs: `./logs.txt`, // empty for no logs
     externalLog: ``, // show new logs from another file
-    startDRG: false,
-    killDRG: true,
-    logConfig: false,
-    ui: true, // use the ui version by default
-    shortcuts: [
-        {
-            name: `cook & publish`, // display name
-            color: `00f0f0`, // hex color
-            run: `cook,publish`, // functions
-            index: 2, // index on list
-        },
-    ],
+    startDRG: false, // when cooked
+    killDRG: true, // when starting cook
+    logConfig: false, // only on cmd version
+    ui: {
+        enabled: true,  // use the ui version by default
+        cleanBox: true, // clean logs around the options
+        cleanSelected: false, // clean logs only between selection arrows
+        shortcuts: [
+            /*{
+                name: `cook & publish`, // display name
+                color: `00f0f0`, // hex color
+                run: `cook,publish`, // functions
+                index: 2, // index on list
+            },*/
+        ],
+    },
     backup: {
         folder: `./backups`, // leave empty
         onCompile: true,
@@ -223,15 +266,22 @@ var config = {
     },
     modio: {
         token: ``, // https://mod.io/me/access > oauth access
-        gameid: 2475,
-        modid: 0,
+        gameid: 2475, // DRG
+        modid: 0, // aka "Resource ID"
         onCompile: false, // upload on compile
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
-        msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default.
+        msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
+        xm: true, // use am/pm or 24h
     },
     update: true, // automaticlly check for updates
 };
+
+/*
+    cookedVariable: { // replace all instances of {key} (RegExp) with {value}
+        "[compile time here]": "{time}",
+    },
+*/
 
 const originalplatformPaths = {
     win: {
@@ -385,7 +435,7 @@ async function updateConfig(forceNew = false) {
         else {
             var externalLogsStart = fs.readFileSync(config.externalLog).toString().length;
             fs.watchFile(config.externalLog, async (curr, prev) => {
-                if (!fs.existsSync(config.externalLog)) return consolelog(`Failed to read externallog? Its probably fine...`);
+                if (!fs.existsSync(config.externalLog)) return consolelog(`Failed to find externallog? Its probably fine, il just check again...`);
                 var read = fs.readFileSync(config.externalLog).toString().slice(externalLogsStart).replace(/ /g, ``).replace(/[^\x00-\x7F]/g, ""); // so much simpler but whatever
                 externalLogsStart += read.length;
                 //consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read), undefined, false); // remove starting new line and header
@@ -446,7 +496,7 @@ module.exports.uploadMod = uploadMod = async (
     zip = `${__dirname}/${config.ModName}.zip`, // mods folder one dosent have permission so maybe not? `${config.drg}/FSD/Mods/${config.ModName}.zip`
     active = true,
     version = config.modio.dateVersion ? getDateVersion() : findModVersion(),
-    changelog = `Uploaded: ${utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, '')} UTC`,
+    changelog = `Uploaded: ${t24hToXM(utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, ''))}`,
     meta = ``,
 ) => {
     return new Promise(async (r, re) => {
@@ -710,7 +760,7 @@ module.exports.backup = backup = function () {
                 await zl.archiveFolder(buf, `${buf}.zip`);
                 fs.rmSync(buf, { recursive: true, force: true })
             }
-            console.log(searchDir(buf, config.backup.blacklist));
+            //console.log(searchDir(buf, config.backup.blacklist));
             if (config.backup.blacklist.length != 0) searchDir(buf, config.backup.blacklist).forEach(x => fs.rmSync(x, { recursive: true, force: true }));
             consolelog(`Backup done! id: ${chalk.cyan(id)}`);
             r();
@@ -754,7 +804,7 @@ module.exports.loadbackup = loadbackup = async function (id) {
     var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
     if (!backuppath) return consolelog(`Invalid backup id!`);
     var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
-    consolelog(`Loading backup ${folder.split(` - `)[0]} from ${formatTime(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
+    consolelog(`Loading backup ${folder.split(` - `)[0]} from ${since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
 
     if (fs.existsSync(`${__dirname}/../Content/${config.ModName}`) && fs.existsSync(`${__dirname}/../Content/${config.ModName} Latest`)) {
         consolelog(`Backup already loaded, removing.`);
@@ -920,7 +970,7 @@ async function exitHandler(err) {
         x.kill();
         children.splice(children.findIndex(x => x == x), 1);
     });
-    if (err && err != `SIGINT`) console.log(err);
+    if (err && err != `SIGINT` && err.name && err.message) console.log(err);
     if (process.pkg && err) await keypress();
     process.exit();
 }
@@ -1001,7 +1051,7 @@ if (module.parent) return; // required as a module
                 });
                 backuppath.forEach(x => {
                     listBackupOptions.push({
-                        name: `${chalk.cyan(x.split(` - `)[0])} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`,
+                        name: `${chalk.cyan(x.split(` - `)[0])} - ${since(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`,
                         color: `#FFFFFF`,
                         run: () => loadbackup(x.split(` - `)[0]),
                     });
@@ -1115,6 +1165,36 @@ if (module.parent) return; // required as a module
                         }
                     },
                     {
+                        name: `long log`,
+                        color: `#ffffff`,
+                        run: () => {
+                            consolelog(new Array(process.stdout.columns).join(`A`));
+                        }
+                    },
+                    {
+                        name: `fill`,
+                        color: `#ffffff`,
+                        run: () => {
+                            for (var i = 0; i < process.stdout.rows; i++) {
+                                consolelog(new Array(process.stdout.columns).join(`A`));
+                            }
+                        }
+                    },
+                    {
+                        name: `time`,
+                        color: `#ffffff`,
+                        run: () => {
+                            consolelog(t24hToXM(new Date()));
+                        },
+                    },
+                    {
+                        name: `clear`,
+                        color: `#ffffff`,
+                        run: () => {
+                            logHistory = [];
+                        },
+                    },
+                    {
                         name: `empty`,
                         color: `#ffffff`,
                         run: () => { },
@@ -1125,7 +1205,7 @@ if (module.parent) return; // required as a module
             hidden: () => !process.pkg,
         },
     ];
-    config.shortcuts.forEach(x => {
+    config.ui.shortcuts.forEach(x => {
         var index = x.index == undefined ? mainMenu.length : x.index;
         var shortcut = {
             name: x.name || `No name shortcut`,
@@ -1153,7 +1233,7 @@ if (module.parent) return; // required as a module
     var selected = 0;
     var logPush = 0;
     var logMode = false;
-    if (config.ui && process.argv.length == 2) {
+    if (config.ui.enabled && process.argv.length == 2) {
         readline.emitKeypressEvents(process.stdin);
         if (process.stdin.isTTY) process.stdin.setRawMode(true);
         var lastPressKey = ``;
@@ -1197,12 +1277,12 @@ if (module.parent) return; // required as a module
                     break;
                 case `a`:
                 case `left`: // down -
-                    if (fittedLogs.length > Math.abs(logPush - 1))
+                    if (!logMode && fittedLogs.length > Math.abs(logPush - 1))
                         logPush--;
                     break;
                 case `d`:
                 case `right`: // up +
-                    if (logPush + 1 <= 0)
+                    if (!logMode && logPush + 1 <= 0)
                         logPush++;
                     break;
                 case `space`:
@@ -1246,7 +1326,7 @@ if (module.parent) return; // required as a module
         consoleloge.on('log', log => {
             fittedLogs = formatLogs();
             if (fittedLogs.length + logPush > process.stdout.rows)
-                logPush -= fittedLogs.length - lastFittedLogsLength;
+                logPush -= (logLimit - 1 == logHistory.length ? 0 : fittedLogs.length - lastFittedLogsLength);
             lastFittedLogsLength = fittedLogs.length;
             draw();
         });
@@ -1274,6 +1354,16 @@ if (module.parent) return; // required as a module
                     if (longestOption < l) longestOption = l;
                 });
 
+                // selection arrows values
+                var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
+                var left = Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0);
+                var right = Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0);
+
+                if (config.ui.cleanSelected) {
+                    process.stdout.cursorTo(left, y);
+                    process.stdout.write(new Array(right - left + 1).join(` `));
+                }
+
                 options.forEach((x, i) => {
                     var name = dyn(x.name, x);
                     var nameNC = removeColor(name)
@@ -1281,25 +1371,38 @@ if (module.parent) return; // required as a module
                     var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
                     var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
                     var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
+
+                    if (config.ui.cleanBox) {
+                        if (i == 0) {
+                            process.stdout.cursorTo(left, Y - 1);
+                            process.stdout.write(new Array(right - left + 2).join(` `));
+                        }
+                        if (i == options.length - 1) {
+                            process.stdout.cursorTo(left, Y + 1);
+                            process.stdout.write(new Array(right - left + 2).join(` `));
+                        }
+
+                        process.stdout.cursorTo(left, Y);
+                        process.stdout.write(new Array(right - left + 2).join(` `));
+                    }
+
                     process.stdout.cursorTo(X, Y); // x=left/right y=up/down
                     process.stdout.write(opt);
                 });
 
-                if (logPush) {
-                    process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
-                    process.stdout.write(chalk.gray(String(logPush)));
-                }
+                // > selecting arrows <
 
-                // selection arrows
-                var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
-                var left = Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0);
-                var right = Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0);
                 process.stdout.cursorTo(left, y);
                 process.stdout.write(`>`);
                 process.stdout.cursorTo(right, y);
                 process.stdout.write(`<`);
                 if (selecting) setTimeout(() => draw(), 200);
                 selecting = false;
+
+                if (logPush) {
+                    process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
+                    process.stdout.write(chalk.gray(String(logPush)));
+                }
             }
 
             // latest log
@@ -1404,7 +1507,7 @@ if (module.parent) return; // required as a module
             return 0;
         });
         backuppath.forEach(x => {
-            consolelog(`${chalk.cyan(x.split(` - `)[0])} - ${formatTime(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`);
+            consolelog(`${chalk.cyan(x.split(` - `)[0])} - ${since(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`);
         });
         consolelog(`\nBackups: ${chalk.cyan(backuppath.length)}`);
         exitHandler()
@@ -1452,18 +1555,44 @@ if (module.parent) return; // required as a module
                     fs.renameSync(`${__dirname}/temp/${config.ModName}.pak`, `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
                     consolelog(`Packed!`);
 
+                    /*
+                    // Bad fucking idea
+                    if (config.cookedVariable) {
+                        consolelog(`Cooking variables...`);
+                        await new Promise(r => {
+                            var f = `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`;
+                            var ft = `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}TEMP.pak`;
+                            var w = fs.createWriteStream(ft);
+                            fs.createReadStream(f)
+                                .on(`data`, d => {
+                                    d = d.toString();
+                                    Object.keys(config.cookedVariable).forEach(key => {
+                                        d = d.replace(new RegExp(escapeRegEx(key), `g`), config.cookedVariable[key].replace(`{time}`, t24hToXM(utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, ''))));
+                                    });
+                                    w.write(d);
+                                })
+                                .on(`end`, () => {
+                                    w.end();
+                                    //fs.rmSync(f);
+                                    //fs.renameSync(ft, f);
+                                    r();
+                                });
+                        });
+                        consolelog(`Cooked variables!`);
+                    }*/
+
                     if (config.zip.onCompile) {
-                        await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, `${config.drg}/FSD/Mods/${config.ModName}.zip`)
+                        await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, `${config.drg}/FSD/Mods/${config.ModName}.zip`);
                         config.zip.to.forEach(dir =>
                             fs.copySync(`${config.drg}/FSD/Mods/${config.ModName}.zip`, `${dir}${config.ModName}.zip`)
                         );
                     }
 
                     if (config.modio.onCompile) publish();
-                    if (config.backup.onCompile) await backup();
-                    if (config.startDRG) await startDrg();
+                    if (config.backup.onCompile) backup();
+                    if (config.startDRG) startDrg();
 
-                    consolelog(`Done in ${chalk.cyan(formatTime(new Date() - startTime))}!`);
+                    consolelog(`Done in ${chalk.cyan(since(new Date() - startTime))}!`);
                     r();
                 })
             children.push(ch);
@@ -1565,13 +1694,13 @@ if (module.parent) return; // required as a module
                             errorsLogs += `${x}\n`;
                         }
                     });
-                    consolelog(`Errors ${errs}:\n\n${errorsLogs}`);
+                    consolelog(`Errors ${chalk.redBright(errs)}:\n\n${errorsLogs}`);
                     if (logsDisabled) {
                         consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                         fs.renameSync(config.logs, `${__dirname}/logs.txt`);
                         return r();
                     }
-                    consolelog(`${errs != 0 ? `\n` : ``}${chalk.red(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
+                    consolelog(`${errs != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
                     return r();
                 } else {
                     consolelog(`What the fuck did you do.`);
@@ -1585,4 +1714,4 @@ if (module.parent) return; // required as a module
 })();
 
 // ~ for console
-// recompileshaders all
+// recompileshaders allCave
