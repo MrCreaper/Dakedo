@@ -51,6 +51,30 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 }
 ```
 
+## Shortcuts
+
+If you dont want to do a simple cook & publish then you can just run normal nodejs code as well,
+just start it with "code{newline}".
+
+Example:
+
+```json
+{
+    name: "hack the mainframe",
+    color: "00ff00",
+    run: "code
+    consolelog(`Mainframe hacked!`);",
+    index: -1,
+}
+```
+
+### Shortcut functions
+
+- cook (cooks and packs)
+- publish (uploads current build of mod in the mods folder)
+- backup (backups)
+- refreshDirsToNeverCook (Refreshes ./Config/DefaultGame.ini > DirectoriesToNeverCook list)
+
 ## Compiler Options
 
 If you are too cool for the UI you can use options. Using any options disables ui.

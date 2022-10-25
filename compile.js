@@ -40,7 +40,7 @@ function consolelog(log = ``, urgent = false, save = true, event = true) {
     latestLog = log;
     var i = logHistory.push(log);
     while (logHistory.length > 100) {
-        logHistory.pop();
+        logHistory.shift();
     }
     if (event)
         consoleloge.emit(`log`, log);
@@ -200,6 +200,14 @@ var config = {
     killDRG: true,
     logConfig: false,
     ui: true, // use the ui version by default
+    shortcuts: [
+        {
+            name: `cook & publish`, // display name
+            color: `00f0f0`, // hex color
+            run: `cook,publish`, // functions
+            index: 2, // index on list
+        },
+    ],
     backup: {
         folder: `./backups`, // leave empty
         onCompile: true,
@@ -220,6 +228,7 @@ var config = {
         onCompile: false, // upload on compile
         deleteOther: true, // deletes older or non-active files
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
+        msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default.
     },
     update: true, // automaticlly check for updates
 };
@@ -413,15 +422,37 @@ function ObjectToForm(obj = {}) {
     return form;
 }
 
+function getDateVersion() {
+    return new Promise(async r => {
+        var files = await getFiles();
+        if (!files) return r(``);
+        var patch = 0;
+        var todaysVersion = `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth() + 1}.${utcNow.getUTCDate()}`;
+        files.forEach(f => {
+            if (new Date() - new Date(f.date_added) < 86400000 * 100000) // uploaded in the last 24h
+                patch++;
+        });
+        // I dont really want to use a cache for counting patches...
+        var ms = new Date().getMilliseconds();
+        var ver = `${todaysVersion}${patch && !config.modio.deleteOther ? `-${patch}` : (config.modio.msPatch ? `-${ms}` : ``)}`;
+        if (ver == files[0].version && !config.modio.deleteOther)
+            r(`${ver.replace(`-${ms}`, `-${ms + 1 == 1000 ? 0 : ms + 1}`)}-LUCKY`); // You had a bad time ONCE
+        else
+            r(ver);
+    })
+}
+
 module.exports.uploadMod = uploadMod = async (
     zip = `${__dirname}/${config.ModName}.zip`, // mods folder one dosent have permission so maybe not? `${config.drg}/FSD/Mods/${config.ModName}.zip`
     active = true,
-    version = config.modio.dateVersion ? `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth() + 1}.${utcNow.getUTCDate()}` : findModVersion(),
+    version = config.modio.dateVersion ? getDateVersion() : findModVersion(),
     changelog = `Uploaded: ${utcNow.toISOString().replace(/T/, ' ').replace(/\..+/, '')} UTC`,
     meta = ``,
 ) => {
     return new Promise(async (r, re) => {
-        if (fs.statSync(zip).size > 5368709120) return consolelog(`Zip bigger then 5gb`);
+        if (!fs.existsSync(zip)) return r(consolelog(`File dosent exist.\n${zip}`));
+        if (fs.statSync(zip).size > 5368709120) return r(consolelog(`Zip bigger then 5gb`));
+        if (String(version) == `[object Promise]`) version = await version;
         var body = {
             filedata: fs.createReadStream(zip),
             filehash: crypto.createHash('md5').update(fs.readFileSync(zip)).digest('hex'),
@@ -447,12 +478,16 @@ module.exports.uploadMod = uploadMod = async (
         var req = https.request(options, (res) => {
             var data = [];
             res.on('data', (d) => data.push(d));
-            req.on(`close`, () => {
+            req.on(`close`, async () => {
                 var buffer = Buffer.concat(data);
                 var resp = JSON.parse(buffer.toString());
                 if (res.statusCode == 201)
                     r(resp);
                 else {
+                    if (resp.error.code == 422) {
+                        consolelog(`Stupid error. Retrying.. >:(`);
+                        r(await uploadMod.apply(null, [...arguments]));
+                    }
                     if (resp.error)
                         consolelog(resp.error);
                     else consolelog(resp);
@@ -495,8 +530,8 @@ module.exports.deleteModFile = deleteModFile = async function (id) {
                 if (res.statusCode == 204)
                     r(true);
                 else {
-                    if (resp.error)
-                        consolelog(resp.error);
+                    if (isJsonString(resp) && JSON.parse(resp).error)
+                        consolelog(JSON.parse(resp).error);
                     else consolelog(resp);
                     r(false);
                 }
@@ -540,6 +575,33 @@ module.exports.getFiles = getFiles = async function (gameid = config.modio.gamei
 
         req.on('error', (e) => r(e));
         req.end();
+    })
+};
+
+globalThis.publish = async function () {
+    return new Promise(async r => {
+        consolelog(`Publising...`);
+        var madeZip = false;
+        var zip = `${config.drg}/FSD/Mods/${config.ModName}.zip`;
+        if (!fs.existsSync(zip)) {
+            await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, zip);
+            madeZip = true;
+        }
+        var res = await uploadMod(zip);
+        if (!res.filename)
+            consolelog(`Failed to publish`);
+        else {
+            consolelog(`Published! ${chalk.cyan(res.version ? `v${res.version}` : res.filename)}`);
+
+            if (config.modio.deleteOther) {
+                var files = await getFiles();
+                if (files)
+                    files.filter(x => x.filename != res.filename).forEach(x => deleteModFile(x.id));
+            }
+        }
+        if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
+
+        r(res == true);
     })
 };
 
@@ -889,7 +951,7 @@ if (module.parent) return; // required as a module
 
     var mainMenu = [
         {
-            name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked ${self.running}` : `cooking`),
+            name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked` : `cooking`),
             color: `#00ff00`,
             run: cook,
         },
@@ -1063,6 +1125,30 @@ if (module.parent) return; // required as a module
             hidden: () => !process.pkg,
         },
     ];
+    config.shortcuts.forEach(x => {
+        var index = x.index == undefined ? mainMenu.length : x.index;
+        var shortcut = {
+            name: x.name || `No name shortcut`,
+            color: x.color || ``,
+            run: (self) => {
+                return new Promise(async r => {
+                    if (x.run.startsWith(`code\n`))
+                        eval(x.run.replace(`code\n`, ``));
+                    else {
+                        const runlist = x.run.split(`,`);
+                        for (var i = 0; i < runlist.length; i++) {
+                            var runName = runlist[i];
+                            var run = module.exports[runName]; // globalThis
+                            if (!run) return consolelog(chalk.redBright(`Invalid function "${runName}" in "${x.name}" (index:${index}).\nCheck the readme for a list of commands\nhttps://github.com/MrCreaper/drg-modding-compiler#Shortcut-functions`));
+                            await run();
+                        }
+                        r();
+                    }
+                });
+            },
+        };
+        mainMenu.splice(index, 0, shortcut);
+    });
     var selectedMenu = mainMenu;
     var selected = 0;
     var logPush = 0;
@@ -1206,9 +1292,11 @@ if (module.parent) return; // required as a module
 
                 // selection arrows
                 var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
-                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0), y);
+                var left = Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0);
+                var right = Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0);
+                process.stdout.cursorTo(left, y);
                 process.stdout.write(`>`);
-                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0), y);
+                process.stdout.cursorTo(right, y);
                 process.stdout.write(`<`);
                 if (selecting) setTimeout(() => draw(), 200);
                 selecting = false;
@@ -1331,30 +1419,6 @@ if (module.parent) return; // required as a module
     //return child.exec(`wine "${config.UnrealEngine}/Engine/Binaries/Win64/UE4Editor.exe" "${W__dirname}/../FSD.uproject"`).on('message', log)
     //return child.exec(`env WINEPREFIX="/home/creaper/Games/epic-games-store" wine C:\\\\Program\\ Files\\\\Epic\\ Games\\\\UE_4.27\\\\Engine\\\\Binaries\\\\Win64\\\\UE4Editor.exe ${W__dirname}/../FSD.uproject`);
 
-    async function publish() {
-        return new Promise(async r => {
-            consolelog(`Publising...`);
-            var madeZip = false;
-            var zip = `${config.drg}/FSD/Mods/${config.ModName}.zip`;
-            if (!fs.existsSync(zip)) {
-                await zl.archiveFolder(`${config.drg}/FSD/Mods/${config.ModName}/`, zip);
-                madeZip = true;
-            }
-            var res = await uploadMod(zip);
-            if (!res.filename)
-                consolelog(`Failed to publish`);
-            else consolelog(`Published! ${chalk.cyan(res.version ? `v${res.version}` : res.filename)}`);
-            if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
-
-            if (config.modio.deleteOther) {
-                var files = await getFiles()
-                if (files);
-                files.filter(x => x.filename != res.filename).forEach(x => deleteModFile(x.id));
-            }
-
-            r(res == true);
-        })
-    }
     if (process.argv.includes(`-onlypublish`))
         return await publish();
 
