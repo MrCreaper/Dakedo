@@ -450,11 +450,14 @@ module.exports.uploadMod = uploadMod = async (
             req.on(`close`, () => {
                 var buffer = Buffer.concat(data);
                 var resp = JSON.parse(buffer.toString());
-                if (resp.error) {
-                    consolelog(resp.error);
-                    r(false);
-                } else if (res.statusCode == 201)
+                if (res.statusCode == 201)
                     r(resp);
+                else {
+                    if (resp.error)
+                        consolelog(resp.error);
+                    else consolelog(resp);
+                    r(false);
+                }
             });
         });
 
@@ -471,31 +474,72 @@ module.exports.uploadMod = uploadMod = async (
 
 module.exports.deleteModFile = deleteModFile = async function (id) {
     return new Promise(async (r, re) => {
-        var res = await fetch(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`, {
-            method: 'delete',
+        var options = {
+            hostname: 'api.mod.io',
+            port: 443,
+            path: `/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files/${id}`,
+            method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${config.modio.token}`,
-                'Content-Type': `application/x-www-form-urlencoded`,
-                'Accept': `application/json`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json',
             },
+        };
+
+        var req = https.request(options, (res) => {
+            var data = [];
+            res.on('data', (d) => data.push(d));
+            req.on(`close`, () => {
+                var buffer = Buffer.concat(data);
+                var resp = buffer.toString();
+                if (res.statusCode == 204)
+                    r(true);
+                else {
+                    if (resp.error)
+                        consolelog(resp.error);
+                    else consolelog(resp);
+                    r(false);
+                }
+            });
         });
-        if (res.status == 204)
-            r(true);
-        else r(res);
+
+        req.on('error', (e) => r(e));
+        req.end();
     })
 };
 
-module.exports.getFiles = async function getFiles(gameid = config.modio.gameid, modid = config.modio.modid, token = config.modio.token) {
+module.exports.getFiles = getFiles = async function (gameid = config.modio.gameid, modid = config.modio.modid, token = config.modio.token) {
     return new Promise(async (r, re) => {
-        var res = await fetch(`https://api.mod.io/v1/games/${gameid}/mods/${modid}/files?api_key=${token}`, {
-            method: 'get',
+        var options = {
+            hostname: 'api.mod.io',
+            port: 443,
+            path: `/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`,
+            method: 'GET',
             headers: {
-                'Accept': `application/json`,
+                'Authorization': `Bearer ${config.modio.token}`,
+                'Accept': 'application/json',
             },
+        };
+
+        var req = https.request(options, (res) => {
+            var data = [];
+            res.on('data', (d) => data.push(d));
+            req.on(`close`, () => {
+                var buffer = Buffer.concat(data);
+                var resp = JSON.parse(buffer.toString());
+                if (res.statusCode == 200)
+                    r(resp.data);
+                else {
+                    if (resp.error)
+                        consolelog(resp.error);
+                    else consolelog(resp);
+                    r(false);
+                }
+            });
         });
-        if (res.status == 200)
-            r((await res.json()).data);
-        else r(res);
+
+        req.on('error', (e) => r(e));
+        req.end();
     })
 };
 
@@ -1301,6 +1345,13 @@ if (module.parent) return; // required as a module
                 consolelog(`Failed to publish`);
             else consolelog(`Published! ${chalk.cyan(res.filename)}`);
             if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
+
+            if (config.modio.deleteOther) {
+                var files = await getFiles()
+                if (files);
+                files.filter(x => x.filename != res.filename).forEach(x => deleteModFile(x.id));
+            }
+
             r(res == true);
         })
     }
@@ -1345,10 +1396,6 @@ if (module.parent) return; // required as a module
                     }
 
                     if (config.modio.onCompile) publish();
-                    /*if(config.modio.deleteOther){
-                        var files = await getFiles();
-                        files.forEach(x => x. deleteModFile(x.id)) // wait for modio devs to add "active" object
-                    }*/
                     if (config.backup.onCompile) await backup();
                     if (config.startDRG) await startDrg();
 
