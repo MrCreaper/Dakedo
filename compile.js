@@ -20,7 +20,7 @@ var logHistory = [];
  * @param {boolean} urgent Used for logging very important stuff as module
  * @returns {intreger} logHistory index
  */
-function consolelog(log = ``, urgent = false, save = true) {
+function consolelog(log = ``, urgent = false, save = true, event = true) {
     if (!module.parent || urgent || module.exports.logsEnabled) // stfu if module
         //console.log.apply(arguments);
         console.log(log);
@@ -32,13 +32,17 @@ function consolelog(log = ``, urgent = false, save = true) {
         case `function`:
             log = `Function: ${log.name}`;
             break;
+        default:
+            log = String(log);
+            break;
     }
     latestLog = log;
     var i = logHistory.push(log);
     while (logHistory.length > 100) {
         logHistory.pop();
     }
-    consoleloge.emit(`log`, log);
+    if (event)
+        consoleloge.emit(`log`, log);
     if (save)
         logFile(`${log}\n`);
     return i;
@@ -839,7 +843,11 @@ if (module.parent) return; // required as a module
     }
     if (config.update) await update();
 
-    var options = [
+    function getOptionIndex(name = `cook`, menu = selectedMenu) {
+        return menu.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == name);
+    }
+
+    var mainMenu = [
         {
             name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked ${self.running}` : `cooking`),
             color: `#00ff00`,
@@ -869,14 +877,14 @@ if (module.parent) return; // required as a module
         { // shows backups which you can load
             name: `list backups`,
             color: `#0328fc`,
-            run: () => {
+            run: (self) => {
                 var listBackupOptions = [
                     {
                         name: `back`,
                         color: `#00FFFF`,
                         run: () => {
-                            selectedOptions = options;
-                            selected = selectedOptions.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == `list backups`);
+                            selectedMenu = mainMenu;
+                            selected = getOptionIndex(self.name);
                         },
                     },
                 ];
@@ -896,7 +904,7 @@ if (module.parent) return; // required as a module
                         run: () => loadbackup(x.split(` - `)[0]),
                     });
                 });
-                selectedOptions = listBackupOptions;
+                selectedMenu = listBackupOptions;
                 selected = 0;
             },
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
@@ -904,8 +912,8 @@ if (module.parent) return; // required as a module
         {
             name: `settings`,
             color: `#808080`,
-            run: () => {
-                var settingsOptions = [
+            run: (self) => {
+                var settingsMenu = [
                     {
                         name: () => `${config.ProjectName} > ${config.ModName}`,
                     },
@@ -913,8 +921,8 @@ if (module.parent) return; // required as a module
                         name: `back`,
                         color: `#00FFFF`,
                         run: () => {
-                            selectedOptions = options;
-                            selected = selectedOptions.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == `settings`);
+                            selectedMenu = mainMenu;
+                            selected = getOptionIndex(self.name);
                         },
                     },
                 ];
@@ -959,10 +967,10 @@ if (module.parent) return; // required as a module
                                 updateConfig();
                             },
                         };
-                        settingsOptions.push(setting);
+                        settingsMenu.push(setting);
                     });
                 }
-                selectedOptions = settingsOptions;
+                selectedMenu = settingsMenu;
                 selected = 1;
             },
             hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
@@ -978,13 +986,44 @@ if (module.parent) return; // required as a module
             run: exitHandler,
         },
         {
-            name: `log`,
-            color: `#ffffff`,
-            run: () => consolelog(`AAA ${logHistory.length}`), // remember that the log limit is 100
+            name: `debug`,
+            color: `#00ff00`,
+            run: (self) => {
+                selectedMenu = [
+                    {
+                        name: `back`,
+                        color: `#00FFFF`,
+                        run: () => {
+                            selectedMenu = mainMenu;
+                            selected = getOptionIndex(self.name);
+                        }
+                    },
+                    {
+                        name: `log`,
+                        color: `#ffffff`,
+                        run: () => consolelog(`AAA ${logHistory.length}`), // remember that the log limit is 100
+                    },
+                    {
+                        name: `bulk log`,
+                        color: `#ffffff`,
+                        run: () => {
+                            for (var i = 0; i < 5; i++) {
+                                consolelog(`AAAA ${i}`);
+                            }
+                        }
+                    },
+                    {
+                        name: `empty`,
+                        color: `#ffffff`,
+                        run: () => { },
+                    },
+                ];
+                selected = 0;
+            },
             hidden: () => !process.pkg,
         },
     ];
-    var selectedOptions = options;
+    var selectedMenu = mainMenu;
     var selected = 0;
     var logPush = 0;
     var logMode = false;
@@ -999,20 +1038,20 @@ if (module.parent) return; // required as a module
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
             lastPressDate = new Date();
-            selectedOptions = selectedOptions.filter(x => x.hidden ? x.hidden() : true);
-            var selectedOption = selectedOptions[selected];
+            selectedMenu = selectedMenu.filter(x => x.hidden ? x.hidden() : true);
+            var selectedOption = selectedMenu[selected];
             //console.log(key);
             //consolelog(k);
             switch (k) {
                 case `w`:
                 case `up`:
                     subS();
-                    while (!selectedOptions[selected].run) {
+                    while (!selectedMenu[selected].run) {
                         subS();
                     }
                     function subS() {
                         if (selected - 1 < 0)
-                            selected = selectedOptions.length - 1;
+                            selected = selectedMenu.length - 1;
                         else
                             selected--;
                     }
@@ -1020,11 +1059,11 @@ if (module.parent) return; // required as a module
                 case `s`:
                 case `down`:
                     addS();
-                    while (!selectedOptions[selected].run) {
+                    while (!selectedMenu[selected].run) {
                         addS();
                     }
                     function addS() {
-                        if (selected + 1 >= selectedOptions.length)
+                        if (selected + 1 >= selectedMenu.length)
                             selected = 0;
                         else
                             selected++;
@@ -1077,13 +1116,15 @@ if (module.parent) return; // required as a module
         function dyn(a, arg) { // dynamic
             return typeof a == `function` ? a(arg) : a;
         }
+        var lastFittedLogsLength = 0;
         consoleloge.on('log', log => {
             fittedLogs = formatLogs();
             if (fittedLogs.length + logPush > process.stdout.rows)
-                logPush--;
+                logPush -= fittedLogs.length - lastFittedLogsLength;
+            lastFittedLogsLength = fittedLogs.length;
             draw();
         });
-        function draw(clean = false, options = selectedOptions) {
+        function draw(clean = false, options = selectedMenu) {
             // clear old drawing
             for (var i = 0; i < process.stdout.rows; i++) {
                 console.log('\r\n');
@@ -1327,10 +1368,10 @@ if (module.parent) return; // required as a module
 
     /*module.exports.jsonify = jsonify = function jsonify(file) {
         const { Extractor } = require('node-wick');
-    
+     
         // Make a new Extractor by specifying the file path (minus the extension), and the AES encryption key as a hexadecimal string.
         let extractor = new Extractor("pakchunk", "");
-    
+     
         // Iterate over all the files in the ucas, and extract them.
         // get_file_list returns an array of file paths within the ucas. You will need the index in the array to extract the files.
         extractor.get_file_list().forEach((v, idx) => {
@@ -1346,7 +1387,7 @@ if (module.parent) return; // required as a module
         //return exitHandler();
         //fs.chmodSync(`${__dirname}/../Saved/Cooked/WindowsNoEditor`,0777); // no access means no access, idiot
     }
-    
+     
     if (fs.existsSync(`${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`) && !fs.accessSync(`${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, fs.constants.W_OK | fs.constants.R_OK)) {
         consolelog(`\nNo access to ${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
         if (platform == `linux`) consolelog(`Please run:\nchmod 7777 -R ${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
