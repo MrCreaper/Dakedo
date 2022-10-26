@@ -161,12 +161,15 @@ function escapeRegEx(s) {
 }
 
 function formatTime(time) {
-    if (config.modio.xm)
+    if (typeof time == `object`) time = time.toISOString().replace(/T/, ' ').replace(/\..+/, '')
+    if (config.modio.xm) {
         var timeS = time.split(` `);
-    if (timeS[1])
-        timeS[1] = convertTime(timeS[1]);
-    else timeS[0] = convertTime(timeS[0]);
-    return timeS.join(` `);
+        if (timeS[1])
+            timeS[1] = t24hToXM(timeS[1]);
+        else timeS[0] = t24hToXM(timeS[0]);
+        return timeS.join(` `);
+    } else
+        return time;
 }
 
 function t24hToXM(time) {
@@ -1153,14 +1156,14 @@ if (module.parent) return; // required as a module
                     {
                         name: `log`,
                         color: `#ffffff`,
-                        run: () => consolelog(`AAA ${logHistory.length}`), // remember that the log limit is 100
+                        run: () => consolelog(`AAA ${logHistory.length} ${new Date().getSeconds()}`), // remember that the log limit is 100
                     },
                     {
                         name: `bulk log`,
                         color: `#ffffff`,
                         run: () => {
                             for (var i = 0; i < 5; i++) {
-                                consolelog(`AAAA ${i}`);
+                                consolelog(`AAAA ${i} ${new Date().getSeconds()}`);
                             }
                         }
                     },
@@ -1184,7 +1187,7 @@ if (module.parent) return; // required as a module
                         name: `time`,
                         color: `#ffffff`,
                         run: () => {
-                            consolelog(t24hToXM(new Date()));
+                            consolelog(formatTime(new Date()));
                         },
                     },
                     {
@@ -1192,6 +1195,7 @@ if (module.parent) return; // required as a module
                         color: `#ffffff`,
                         run: () => {
                             logHistory = [];
+                            fittedLogs = [];
                         },
                     },
                     {
@@ -1325,8 +1329,8 @@ if (module.parent) return; // required as a module
         var lastFittedLogsLength = 0;
         consoleloge.on('log', log => {
             fittedLogs = formatLogs();
-            if (fittedLogs.length + logPush > process.stdout.rows)
-                logPush -= (logLimit - 1 == logHistory.length ? 0 : fittedLogs.length - lastFittedLogsLength);
+            if (fittedLogs.length + logPush > process.stdout.rows) // start pushing down only when the logs go off screen
+                logPush -= fittedLogs.length - lastFittedLogsLength;
             lastFittedLogsLength = fittedLogs.length;
             draw();
         });
