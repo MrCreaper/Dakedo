@@ -62,6 +62,8 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
         dateVersion: true, // make version from the date year.month.date, otherwise get version from project
         msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
         xm: true, // use am/pm or 24h
+        updateCache: true, // update cache for the mod, no download's needed!
+        cache: "", // auto generated
     },
     update: true, // automaticlly check for updates
 }
@@ -99,7 +101,7 @@ If you are too cool for the UI you can use options. Using any options disables u
 - {mod name} (just adding a mod name will set it as the ModName for the compile)
 - -drg (toggles startDRG)
 - -bu (backups)
-- -lbu{id} (loads backup, exclude id to unload backup)
+- -lbu{id} (loads backup, exclude id to unload backup) (NOTE: dose not load all of "full" backups)
 - -listbu (lists backups)
 - {pak file} (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
 - -unpackdrg (unpacks drg)
