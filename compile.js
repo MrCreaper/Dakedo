@@ -38,7 +38,7 @@ function consolelog(
     if (!log && log != 0) return;
     switch (typeof log) {
         case `object`:
-            if (log.toString && !Array.isArray(log))
+            if (log.toString && !Array.isArray(log) && log.toString() != `[object Object]`)
                 log = log.toString();
             else
                 log = JSON.stringify(log, null, 4);
@@ -279,6 +279,7 @@ var config = {
                 index: 2, // index on list
             },*/
         ],
+        selectArrows: true,
     },
     backup: {
         folder: "{dir}/backups", // leave empty
@@ -324,7 +325,7 @@ const templatePlatformPaths = {
     win: {
         UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
         drg: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate -Compressed`,
         PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
         UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
         modio: {
@@ -334,7 +335,7 @@ const templatePlatformPaths = {
     linux: {
         UnrealEngine: `/home/{me}/Documents/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor`,
+        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates -Compressed`,
         PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt"`,
         UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
         modio: {
@@ -344,7 +345,7 @@ const templatePlatformPaths = {
     linuxwine: {
         UnrealEngine: `/home/{me}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook"`, //  "-installed"
+        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook" "-unattended" "-NoLogTimes" "-iterate" "-Compressed"`, // CookAll
         PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt""`,
         UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}"`,
         modio: {
@@ -1108,8 +1109,8 @@ async function downloadRepo(path = `${__dirname}/FSD-Template`, repo = `DRG-Modd
 
 async function updateProject(updateTemplate = true, updateUnpack = true) {
     return new Promise(async r => {
+        const templatePath = `${__dirname}/.temp/FSD-Template/`;
         if (updateTemplate) {
-            const templatePath = `${__dirname}/.temp/FSD-Template/`;
             var template = await downloadRepo(templatePath);
             if (template != true) return r(consolelog(`Failed to download template`));
             // Remove cringe
@@ -1121,19 +1122,19 @@ async function updateProject(updateTemplate = true, updateUnpack = true) {
                 `Source`,
                 `FSD.uproject`
             ].map(x => `${templatePath}${x}`);
-            var unpackList = // files we want from the unpack
-                fs.readdirSync(`${unpackPath}FSD/Content`) // just all of fuckin /content
-                    .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
-                    .map(x => `${unpackPath}FSD/Content/${x}`);
         }
 
+        const unpackPath = `${__dirname}/.temp/unpack/`;
         if (updateUnpack) {
             // unpack drg INTO /unpack
-            var unpackPath = `${__dirname}/.temp/unpack/`;
             var unpackLog = consolelog(`Unpacking DRG...`);
             var unpacked = await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`, unpackPath);
             if (!unpacked) return consolelog(`Failed to unpack drg`);
             consolelog(`Unpacked DRG`, undefined, undefined, undefined, unpackLog);
+            var unpackList = // files we want from the unpack
+                fs.readdirSync(`${unpackPath}FSD/Content`) // just all of fuckin /content
+                    .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
+                    .map(x => `${unpackPath}FSD/Content/${x}`);
         }
         // :)
         await backup(true);
@@ -1331,6 +1332,7 @@ if (module.parent) return; // required as a module
                             default:
                                 return;
                         }
+                        //val  = get();
                         var setting = {
                             name: () => {
                                 var name = path.length == 0 ? key : `${path.join(` > `)} > ${key}`;
@@ -1350,10 +1352,27 @@ if (module.parent) return; // required as a module
                             run: () => {
                                 switch (typeof val) {
                                     case `boolean`:
-                                        val = !val;
+                                        // I hate nodejs values and refrences
+                                        function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                            stack = stack.concat([key]);
+                                            while (stack.length > 1) {
+                                                object = object[stack.shift()];
+                                            }
+                                            return object[stack.shift()] = newValue;
+                                        }
+                                        function get(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                            stack = stack.concat([key]);
+                                            while (stack.length > 1) {
+                                                object = object[stack.shift()];
+                                            }
+                                            return object[stack.shift()];
+                                        }
+                                        val = set(!get());
+                                        //val = !val;
+                                        //consolelog(configs);
                                         break;
                                 }
-                                writeConfig(unVaredConfig);
+                                writeConfig(/*configs*/unVaredConfig);
                                 updateConfig();
                             },
                         };
@@ -1556,12 +1575,14 @@ if (module.parent) return; // required as a module
                                     color: `#ffffff`,
                                     run: () => {
                                         [
-                                            `${ProjectPath}Binaries`,
+                                            //`${ProjectPath}Binaries`, // requires you to "rebuild" /source stuff :\
                                             `${ProjectPath}Build`,
                                             `${ProjectPath}Intermediate`,
                                             `${ProjectPath}Saved`,
                                             `${ProjectPath}DerivedDataCache`,
-                                            //`${ProjectPath}Content/PipelineCaches`, // actually fucking required for the /Source
+                                            `${ProjectPath}Content/PipelineCaches`, // actually fucking required for the /Source
+                                            `${config.UnrealEngine}Engine/Source/Runtime/Applie/MetalRHI/Private/Shaders`,
+                                            `${config.UnrealEngine}Engine/Source/Binaries/Win64/MetalRHI/Private/Shaders`,
                                         ].forEach(x => {
                                             if (fs.existsSync(x)) {
                                                 fs.rmSync(x, { recursive: true, force: true });
@@ -1778,8 +1799,11 @@ if (module.parent) return; // required as a module
 
                 options.forEach((x, i) => {
                     var name = dyn(x.name, x);
-                    var nameNC = removeColor(name)
-                    var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
+                    var nameNC = removeColor(name);
+                    if (!config.ui.selectArrows && selected == i)
+                        var nameC = chalk.bgHex(dyn(x.color || `#ffffff`, x))(name);
+                    else
+                        var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
                     var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
                     var X = Math.floor(process.stdout.columns * .5 - nameNC.length * .5);
                     var Y = Math.floor(process.stdout.rows * .5 - options.length * .5) + i;
@@ -1799,15 +1823,17 @@ if (module.parent) return; // required as a module
                     }
 
                     process.stdout.cursorTo(X, Y); // x=left/right y=up/down
-                    process.stdout.write(opt);
+                    process.stdout.write(opt); true
                 });
 
                 // > selecting arrows <
 
-                process.stdout.cursorTo(left, y);
-                process.stdout.write(`>`);
-                process.stdout.cursorTo(right, y);
-                process.stdout.write(`<`);
+                if (config.ui.selectArrows) {
+                    process.stdout.cursorTo(left, y);
+                    process.stdout.write(`>`);
+                    process.stdout.cursorTo(right, y);
+                    process.stdout.write(`<`);
+                }
                 if (selecting) setTimeout(() => draw(), 200);
                 selecting = false;
 
@@ -1818,7 +1844,7 @@ if (module.parent) return; // required as a module
             }
 
             // latest log
-            //process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - latestLog.length * .5), process.stdout.rows - 2);
+            //process.stdout.cursorTo(Math.floor(process.stdout.truecolumns * .5 - latestLog.length * .5), process.stdout.rows - 2);
             //process.stdout.write(latestLog);
 
             // reset location
