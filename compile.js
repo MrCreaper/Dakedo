@@ -21,8 +21,8 @@ var logLimit = 100;
  * @param {string} log the log
  * @param {boolean} urgent Used for logging very important stuff as module
  * @param {boolean} save Save to file
- * @param {intreger} event run event
- * @param {boolean} update update index
+ * @param {boolean} event run event
+ * @param {intreger} update update index
  * @returns {intreger} logHistory index
  */
 function consolelog(
@@ -52,8 +52,6 @@ function consolelog(
     }
     latestLog = log;
     var i = update;
-    if (event)
-        consoleloge.emit(`log`, log);
     if (i == -1) {
         if (save)
             logFile(`${log}\n`);
@@ -63,6 +61,8 @@ function consolelog(
     while (logHistory.length > logLimit) {
         logHistory.shift();
     }
+    if (event)
+        consoleloge.emit(`log`, log);
     return i;
 }
 
@@ -90,7 +90,7 @@ function formatLogs(rawlogs = logHistory) {
 
 function filterOffScreenLogs(logs, push = 0) {
     return logs.filter((x, i) =>
-        i + push > -2 // witchcraft and misery.
+        i + push > -1 // witchcraft and misery.
         &&
         !(i + push >= process.stdout.rows)
     );
@@ -344,7 +344,7 @@ const templatePlatformPaths = {
     linuxwine: {
         UnrealEngine: `/home/{me}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor"`,
+        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook"`, //  "-installed"
         PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt""`,
         UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}"`,
         modio: {
@@ -794,14 +794,17 @@ module.exports.pack = (outPath) => {
     });
 };
 
-module.exports.unpack = unpack = function (path, outpath = W__dirname) {
+module.exports.unpack = unpack = function (path, outpath = __dirname) {
     return new Promise(r => {
-        var normalOutPath = outpath;
+        const normalOutPath = outpath;
+        fs.mkdirsSync(outpath);
         if (wine) {
-            path = `Z:${path}`;
+            if (!path.startsWith(`Z:`))
+                path = `Z:${path}`;
             if (outpath.startsWith(`.`))
                 outpath = PATH.resolve(outpath);
-            outpath = `Z:${outpath}`;
+            if (!outpath.startsWith(`Z:`))
+                outpath = `Z:${outpath}`;
         }
         const cmd = config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath);
         logFile(`${path}\n${cmd}\n\n`)
@@ -817,6 +820,7 @@ module.exports.unpack = unpack = function (path, outpath = W__dirname) {
                     r(true)
                 else {
                     var waitingLog = -1;
+                    fs.mkdirsSync(`${normalOutPath}/FSD/Content/`);
                     var x = setInterval(() => {
                         if (fs.existsSync(`${normalOutPath}/FSD/Content/`) && fs.readdirSync(`${normalOutPath}/FSD/Content/`).length == 22) {
                             clearInterval(x);
@@ -840,6 +844,7 @@ module.exports.backup = backup = function (full) {
                 consolelog(`Making FULL backup...`);
             else
                 consolelog(`Making backup...`);
+            fs.mkdirsSync(`${__dirname}/backups`);
             if (config.backup.max != -1) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
@@ -870,14 +875,17 @@ module.exports.backup = backup = function (full) {
             });
             id++;
             var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
-            fs.mkdirSync(buf);
+            fs.mkdirsSync(buf);
             if (full) {
                 var s = buf.replace(ProjectPath, ``).split(`/`)[0];
                 var paths = fs.readdirSync(ProjectPath);
                 for (var i = 0; i < paths.length; i++) {
                     var p = paths[i];
-                    if (p != s)
-                        fs.copySync(`${ProjectPath}/${p}`, `${buf}/${p}`);
+                    if (p != s) {
+                        var logI = consolelog(`Backuping ${chalk.cyan(p)}`);
+                        fs.copySync(`${ProjectPath}${p}`, `${buf}/${p}`);
+                        consolelog(`Backuped ${chalk.cyan(p)}`, undefined, undefined, undefined, logI);
+                    }
                 }
             }
             // full is just an addition, load it yourself. (load backup list should have a tag for if its a full) (too lazy rn)
@@ -906,6 +914,11 @@ module.exports.backup = backup = function (full) {
 module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName]) {
     whitelist = whitelist.concat(config.DirsToCook)
     var configFile = `${ProjectPath}Config/DefaultGame.ini`;
+    if (!fs.existsSync(configFile)) {
+        fs.mkdirsSync(configFile);
+        fs.writeFileSync(``, configFile);
+        consolelog(`Failed to find ${chalk.redBright(PATH.basename(configFile))}`);
+    }
     var read = fs.readFileSync(configFile, `utf8`);
     read = read.split(getLineBreakChar(read));
     if (!read.includes(`BuildConfiguration=PPBC_Shipping`)) read.push(`BuildConfiguration=PPBC_Shipping`); // has to be shipping
@@ -1056,16 +1069,15 @@ async function update() {
     });
 }
 
-async function updateProject() {
-    const repo = `DRG-Modding/FSD-Template`;
+async function downloadRepo(path = `${__dirname}/FSD-Template`, repo = `DRG-Modding/FSD-Template`) {
     if (!repo) return;
     return new Promise(async r => {
-        var mLog = consolelog(`Updating project...`);
-        https.get(`https://codeload.github.com/DRG-Modding/FSD-Template/zip/main`, async res => {
+        https.get(`https://codeload.github.com/${repo}/zip/main`, async res => {
             if (!res.headers['content-length']) {
-                consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
-                return r(await updateProject());
+                consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`); // ok.
+                return r(await downloadRepo(path));
             }
+            var mLog = consolelog(`Updating project...`);
             var size = parseInt(res.headers['content-length']);
             var downloaded = 0;
             consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
@@ -1077,39 +1089,12 @@ async function updateProject() {
             })
                 .pipe(fs.createWriteStream(zip))
                 .on(`close`, async () => {
-                    consolelog(`Downloaded, unpacking...`, undefined, undefined, undefined, mLog);
-                    await zl.extract(zip, `${__dirname}/.temp/${repo.replace(`/`, ``)}/`);
-                    consolelog(`Unpacked`, undefined, undefined, undefined, mLog);
-                    fs.renameSync(`${__dirname}/.temp/${repo.replace(`/`, ``)}/${repo.split(`/`)[1]}-main/`, `${__dirname}/.temp/FSD`);
-                    var gathering = `${__dirname}/.temp/FSD/`;
-                    fs.rmSync(`${gathering}Content/`, { recursive: true, force: true }); // nothing fucking important there :)
-                    var unpacked = await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`, `${__dirname}/.temp/`);
-                    if (!unpacked) return consolelog(`Failed to unpack drg`);
-                    consolelog(`Unpacked DRG`);
-                    var updateList = [
-                        `Plugins`,
-                        `Source`,
-                    ].concat(
-                        fs.readdirSync(`${__dirname}/.temp/FSD/Content`)
-                            .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
-                            .map(x => `Content/${x}`)
-                    );
-                    await backup(true);
-                    var done = 0;
-                    for (var i = 0; i < updateList.length; i++) {
-                        var x = updateList[i];
-                        fs.rmSync(`${ProjectPath}${x}`, { recursive: true, force: true });
-                        var newFile = `${gathering}${x}`;
-                        if (!fs.existsSync(newFile))
-                            consolelog(`Failed to find update for "${chalk.redBright(x)}"`);
-                        else {
-                            fs.renameSync(newFile, `${ProjectPath}${x}`);
-                            consolelog(`Updated "${chalk.cyan(x.split(`/`)[x.split(`/`).length - 1])}"`);
-                            done++;
-                        }
-                    }
-                    consolelog(`Updated ${chalk.cyan(done)}/${chalk.cyan(updateList.length)}${done == updateList.length ? ` ${chalk.greenBright(`PERFECT!`)}` : ``}`);
-                    fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
+                    consolelog(`Downloaded, extracting...`, undefined, undefined, undefined, mLog);
+                    // extract downloaded zip
+                    await zl.extract(zip, `${__dirname}/.temp/${repo.replace(`/`, ``)}`);
+                    consolelog(`Extracted`, undefined, undefined, undefined, mLog);
+                    // simplify directiories
+                    fs.moveSync(`${__dirname}/.temp/${repo.replace(`/`, ``)}/${repo.split(`/`)[1]}-main/`, path, { overwrite: true });
                     r(true);
                 });
         })
@@ -1119,7 +1104,60 @@ async function updateProject() {
                 r(e);
             });
     });
-}
+};
+
+async function updateProject(updateTemplate = true, updateUnpack = true) {
+    return new Promise(async r => {
+        if (updateTemplate) {
+            const templatePath = `${__dirname}/.temp/FSD-Template/`;
+            var template = await downloadRepo(templatePath);
+            if (template != true) return r(consolelog(`Failed to download template`));
+            // Remove cringe
+            fs.rmSync(`${templatePath}Content/`, { recursive: true, force: true });
+
+            var templateFiles = [ // files we want from the template
+                `Binaries`,
+                `Plugins`,
+                `Source`,
+                `FSD.uproject`
+            ].map(x => `${templatePath}${x}`);
+            var unpackList = // files we want from the unpack
+                fs.readdirSync(`${unpackPath}FSD/Content`) // just all of fuckin /content
+                    .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
+                    .map(x => `${unpackPath}FSD/Content/${x}`);
+        }
+
+        if (updateUnpack) {
+            // unpack drg INTO /unpack
+            var unpackPath = `${__dirname}/.temp/unpack/`;
+            var unpackLog = consolelog(`Unpacking DRG...`);
+            var unpacked = await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`, unpackPath);
+            if (!unpacked) return consolelog(`Failed to unpack drg`);
+            consolelog(`Unpacked DRG`, undefined, undefined, undefined, unpackLog);
+        }
+        // :)
+        await backup(true);
+        // update folders
+        var done = 0;
+        var updateList = [].concat(templateFiles, unpackList);
+        for (var i = 0; i < updateList.length; i++) {
+            var x = updateList[i];
+            var dest = `${ProjectPath}${x.replace(templatePath, ``).replace(`${unpackPath}FSD/`, ``)}`;
+            fs.rmSync(dest, { recursive: true, force: true });
+            if (!fs.existsSync(x))
+                consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(x))}"\nMissing: ${x}`);
+            else {
+                var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(x))}`);
+                fs.moveSync(x, dest, { overwrite: true });
+                consolelog(`Updated ${chalk.cyan(PATH.basename(x))}`, undefined, undefined, undefined, logI);
+                done++;
+            }
+        }
+        consolelog(`Updated ${chalk.cyan(done)}/${chalk.cyan(updateList.length)}${done == updateList.length ? ` ${chalk.greenBright(`PERFECT!`)}` : ``}`);
+        fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
+        r(true);
+    })
+};
 
 async function startDrg() {
     return new Promise(async r => {
@@ -1167,8 +1205,10 @@ if (fs.existsSync(`${__dirname}/.temp/`)) { // remove temp folder if exitHandler
 async function exitHandler(err) {
     if (fs.existsSync(`${__dirname}/.temp/`) && process.pkg) fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
     children.forEach(x => {
-        if (!x.kill) console.log(`This isnt a fucking child!`);
-        x.kill();
+        if (!x.kill)
+            console.log(`This isnt a fucking child!`);
+        else
+            x.kill();
         children.splice(children.findIndex(x => x == x), 1);
     });
     if (err && err != `SIGINT` && err.name && err.message) console.log(err);
@@ -1260,7 +1300,7 @@ if (module.parent) return; // required as a module
                 selectedMenu = listBackupOptions;
                 selected = 0;
             },
-            hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
+            hidden: () => fs.existsSync(`${__dirname}/backups`) && fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
             name: `settings`,
@@ -1323,7 +1363,7 @@ if (module.parent) return; // required as a module
                 selectedMenu = settingsMenu;
                 selected = 1;
             },
-            hidden: () => fs.readdirSync(`${__dirname}/backups`).length,
+            hidden: () => fs.existsSync(`${__dirname}/backups`) && fs.readdirSync(`${__dirname}/backups`).length,
         },
         {
             name: (self) => self.running == undefined ? `drg` : self.running == false ? `drg` : `launching...`,
@@ -1364,7 +1404,17 @@ if (module.parent) return; // required as a module
                                 {
                                     name: `project`,
                                     color: `#ff00ff`,
-                                    run: updateProject,
+                                    run: () => updateProject(),
+                                },
+                                {
+                                    name: `project (template)`,
+                                    color: `#ff00ff`,
+                                    run: () => updateProject(true, false),
+                                },
+                                {
+                                    name: `project (unpack)`,
+                                    color: `#ff00ff`,
+                                    run: () => updateProject(false, true),
                                 },
                             ];
                             selected = 0;
@@ -1384,12 +1434,12 @@ if (module.parent) return; // required as a module
                                     }
                                 },
                                 {
-                                    name: `export textures`,
+                                    name: `textures`,
                                     color: `#00ff0f`,
                                     run: exportTex,
                                 },
                                 {
-                                    name: `export textures flat`,
+                                    name: `textures flat`,
                                     color: `#00ffff`,
                                     run: () => exportTex(undefined, undefined, `${__dirname}/flat/`),
                                 },
@@ -1398,8 +1448,9 @@ if (module.parent) return; // required as a module
                                     color: `#ffa500`,
                                     run: async (self) => {
                                         return new Promise(async r => {
+                                            var path = `${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`;
                                             consolelog(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`);
-                                            await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`);
+                                            await unpack(path);
                                             consolelog(`Unpacked!`);
                                         })
                                     },
@@ -1481,6 +1532,68 @@ if (module.parent) return; // required as a module
                                     color: `#ffffff`,
                                     run: () => { },
                                 },
+                                {
+                                    name: `compile c++`,
+                                    color: `#ffffff`,
+                                    run: () => {
+                                        function wineify(cmd) {
+                                            return wine ? `wine ${cmd.replace(`C:/Program Files/Epic Games/UE_4.27`, config.UnrealEngine).split(`|`).map(x => `"${x}"`).join(` `)}` : cmd;
+                                        }
+                                        return new Promise(r => {
+                                            var cmd = wineify(`C:/Program Files/Epic Games/UE_4.27/Engine/Binaries/DotNET/UnrealBuildTool.exe|Development|Win64|-Project="Z:/home/${username}/${config.ModName}/plugins/FSD/FSD.uproject"|-TargetType=Editor|-Progress|-NoEngineChanges|-NoHotReloadFromIDE`);
+                                            logFile(`\n${cmd}\n\n`);
+                                            var ch = child.exec(cmd)
+                                                .on('exit', async () => {
+                                                    consolelog(`Exited`);
+                                                    r();
+                                                }).stdout.on('data', (d) => logFile(String(d)));
+                                            children.push(ch);
+                                        });
+                                    },
+                                },
+                                {
+                                    name: `clear caches`,
+                                    color: `#ffffff`,
+                                    run: () => {
+                                        [
+                                            `${ProjectPath}Binaries`,
+                                            `${ProjectPath}Build`,
+                                            `${ProjectPath}Intermediate`,
+                                            `${ProjectPath}Saved`,
+                                            `${ProjectPath}DerivedDataCache`,
+                                            //`${ProjectPath}Content/PipelineCaches`, // actually fucking required for the /Source
+                                        ].forEach(x => {
+                                            if (fs.existsSync(x)) {
+                                                fs.rmSync(x, { recursive: true, force: true });
+                                                consolelog(`Deleted ${x}`);
+                                            }
+                                        });
+                                        consolelog(`Cleared`);
+                                    },
+                                },
+                                {
+                                    name: `empty .uproject`,
+                                    color: `#ffffff`,
+                                    run: () => {
+                                        fs.writeJSONSync(`${__dirname}${config.ProjectFile}`, {
+                                            "FileVersion": 3,
+                                            "EngineAssociation": "4.27",
+                                            "Category": "",
+                                            "Description": "",
+                                            "Modules": [],
+                                            "Plugins": [],
+                                            "TargetPlatforms": [
+                                                "Windows"
+                                            ]
+                                        });
+                                        consolelog(`Emptied`);
+                                    },
+                                },
+                                {
+                                    name: `refresh-dirs-to-never-cook`,
+                                    color: `#ffffff`,
+                                    run: () => refreshDirsToNeverCook(),
+                                },
                             ];
                             selected = 0;
                         },
@@ -1522,6 +1635,9 @@ if (module.parent) return; // required as a module
         mainMenu.splice(index, 0, shortcut);
     });
     var selectedMenu = mainMenu;
+
+    ////////////////////////////
+
     var selected = 0;
     var logPush = 0;
     var logMode = false;
@@ -1618,7 +1734,7 @@ if (module.parent) return; // required as a module
         }
         var lastFittedLogsLength = 0;
         consoleloge.on('log', log => {
-            fittedLogs = formatLogs();
+            fittedLogs = formatLogs(logHistory);
             if (fittedLogs.length + logPush > process.stdout.rows) // start pushing down only when the logs go off screen
                 logPush -= fittedLogs.length - lastFittedLogsLength;
             if (-logPush > fittedLogs.length) // scroll backup (+) if cleared
@@ -1890,7 +2006,7 @@ if (module.parent) return; // required as a module
 
                     consolelog(`Done in ${chalk.cyan(since(new Date() - startTime))}!`);
                     r();
-                })
+                }).stdout.on('data', (d) => logFile(String(d)));
             children.push(ch);
         });
     }
@@ -2004,7 +2120,7 @@ if (module.parent) return; // required as a module
                     consolelog(`${errs != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
                     return r();
                 } else {
-                    consolelog(`What the fuck did you do.`);
+                    consolelog(`Failed to cook.`);
                     return r();
                 }
             })
