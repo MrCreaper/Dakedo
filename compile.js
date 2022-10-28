@@ -259,9 +259,12 @@ var config = {
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
     drg: "", // auto generated
-    CookingCmd: "", // auto generated
-    PackingCmd: "", // auto generated
-    UnPackingCmd: "", // auto generated
+    cmds: {
+        Cooking: "", // auto generated
+        Packing: "", // auto generated
+        UnPacking: "", // auto generated
+        CompileAll: "", // auto generated
+    },
     logs: "{dir}/logs.txt", // empty for no logs
     externalLog: "", // show new logs from another file
     startDRG: false, // when cooked
@@ -325,9 +328,11 @@ const templatePlatformPaths = {
     win: {
         UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
         drg: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate -Compressed`,
-        PackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
-        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
+        cmds: {
+            Cooking: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate -Compressed`,
+            Packing: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
+            UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
+        },
         modio: {
             cache: `C:\\users\\Public\\mod.io\\2475\\`,
         },
@@ -335,9 +340,11 @@ const templatePlatformPaths = {
     linux: {
         UnrealEngine: `/home/{me}/Documents/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates -Compressed`,
-        PackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt"`,
-        UnPackingCmd: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
+        cmds: {
+            Cooking: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates -Compressed`,
+            Packing: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt"`,
+            UnPacking: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
+        },
         modio: {
             cache: `/home/{me}/.local/share/Steam/steamapps/compatdata/548430/pfx/drive_c/users/Public/mod.io/2475/`,
         },
@@ -345,9 +352,12 @@ const templatePlatformPaths = {
     linuxwine: {
         UnrealEngine: `/home/{me}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
-        CookingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook" "-unattended" "-NoLogTimes" "-iterate" "-Compressed"`, // CookAll
-        PackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt""`,
-        UnPackingCmd: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}"`,
+        cmds: {
+            Cooking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook" "-unattended" "-NoLogTimes" "-iterate" "-Compressed" "-NoShaderCooking"`, // -CookAll
+            CompileAll: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=CompileAllBlueprints" "-unattended" "-NoLogTimes"`,
+            Packing: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt"" "-unattended" "-NoLogTimes"`,
+            UnPacking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}" "-unattended" "-NoLogTimes"`,
+        },
         modio: {
             cache: `/home/{me}/.local/share/Steam/steamapps/compatdata/548430/pfx/drive_c/users/Public/mod.io/2475/`,
         },
@@ -355,9 +365,11 @@ const templatePlatformPaths = {
     macos: {
         UnrealEngine: `no idea`,
         drg: `no idea`,
-        CookingCmd: `no idea`,
-        PackingCmd: `no idea`,
-        UnPackingCmd: `no idea`,
+        cmds: {
+            Cooking: `no idea`,
+            Packing: `no idea`,
+            UnPacking: `no idea`,
+        },
         modio: {
             cache: `no idea`,
         },
@@ -365,9 +377,11 @@ const templatePlatformPaths = {
     givenUpos: { // fallback
         UnrealEngine: `no idea`,
         drg: `no idea`,
-        CookingCmd: `no idea`,
-        PackingCmd: `no idea`,
-        UnPackingCmd: `no idea`,
+        cmds: {
+            Cooking: `no idea`,
+            Packing: `no idea`,
+            UnPacking: `no idea`,
+        },
         modio: {
             cache: `no idea`,
         },
@@ -448,29 +462,29 @@ async function updateConfig(forceNew = false) {
     const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${ProjectPath}Content/${x}`));
     if (tempModName) config.ModName = tempModName;
     variable(config);
-    function variable(config) {
-        Object.keys(config).forEach(x => {
-            switch (typeof config[x]) {
+    function variable(c) {
+        Object.keys(c).forEach(x => {
+            switch (typeof c[x]) {
                 case `object`:
-                    config[x] = variable(config[x]);
+                    c[x] = variable(c[x]);
                     break;
                 case `string`:
-                    config[x] = config[x]
+                    c[x] = c[x]
                         .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
                         .replace(/{drg}/g, config.drg)
                         .replace(/{me}/g, username)
                         .replace(/{mod}/g, config.ModName)
                         .replace(/{pf}/g, config.ProjectFile);
                     if (platform == `linuxwine`)
-                        config[x] = config[x]
+                        c[x] = c[x]
                             .replace(/{dir}/g, W__dirname); // better to use "{dir}" then "./" since this is running over all configs :)
                     else
-                        config[x] = config[x]
+                        c[x] = c[x]
                             .replace(/{dir}/g, __dirname);
                     break;
             }
         });
-        return config;
+        return c;
     }
 
     // config ready, verify
@@ -726,7 +740,7 @@ module.exports.getFiles = getFiles = async function (gameid = config.modio.gamei
     })
 };
 
-globalThis.publish = async function () {
+module.exports.publish = publish = async function () {
     return new Promise(async r => {
         consolelog(`Publising...`);
         var madeZip = false;
@@ -755,10 +769,81 @@ globalThis.publish = async function () {
     })
 };
 
+module.exports.template = template = async function () {
+    return new Promise(async r => {
+        var ini = require('ini')
+        var dir = `${config.drg}/FSD/Binaries/Win64/TEST/`;
+
+        var resp = await fetch(`https://api.github.com/repos/${`UE4SS/UE4SS`}/releases/latest`);
+        resp = await resp.json();
+        if (resp.message) return r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
+        function download(url, filePath) {
+            return new Promise(async r => {
+                https.get(url, async down => {
+                    if (down.headers.location) return r(await download(down.headers.location, filePath)); // github redirects to their cdn, and https dosent know redirects :\
+                    var file = fs.createWriteStream(`${dir}${asset.name}`);
+                    var log = consolelog(`Downloading ${asset.name}`);
+                    down.pipe(file
+                        .on(`finish`, async () => {
+                            consolelog(`Extracting ${asset.name}...`, undefined, undefined, undefined, log);
+                            await zl.extract(`${dir}${asset.name}`, filePath); // extract zip
+                            fs.rmSync(`${dir}${asset.name}`); // delete zip
+                            consolelog(`Downloaded ${asset.name}`, undefined, undefined, undefined, log);
+                            r();
+                        }))
+                });
+            })
+        }
+
+        // update UE4SS config
+        var ssconfig = ini.parse(fs.readFileSync(`${dir}UE4SS-settings.ini`, 'utf-8'))
+        ssconfig.IgnoreEngineAndCoreUObject = 1;
+        ssconfig.MakeAllFunctionsBlueprintCallable = 1;
+        ssconfig.MakeAllPropertyBlueprintsReadWrite = 1;
+        ssconfig.MakeEnumClassesBlueprintType = 1;
+        fs.writeFileSync(`${dir}UE4SS-settings.ini`, ini.stringify(ssconfig, { section: 'section' }))
+
+        switch (platform) {
+            case `win`: // xinput
+                var asset = resp.assets.find(x => x.name.includes(`Xinput`)); // download xinput for windows and standard for anything else
+                await download(asset.browser_download_url, dir);
+                await startDrg();
+                var mainlua = fs.readFileSync(`${dir}Mods/UHTCompatibleHeaderGeneratorMod/Scripts/main.lua`).toString().split(`(`)[1].split(`,`);
+                consolelog(`When the game has loaded and you've disabled your mods. Press thees keys: ${mainlua[0].replace(`Key.`, ``)} & ${mainlua[1].replace(/[{}]/g, ``).replace(`ModifierKey.`, ``)}`);
+                break;
+            default: // standard
+                var asset = resp.assets.find(x => x.name.includes(`Standard`)); // download xinput for windows and standard for anything else
+                await download(asset.browser_download_url, dir);
+                //await startDrg();
+                consolelog(`WARNING: most likely wont work on anything not windows :\\`);
+                const injector = require(`./node_modules/dll-inject/index`);
+                consolelog(injector);
+
+                if (injector.isProcessRunning('notepad.exe')) {
+                    const error = injector.inject('notepad.exe', `${dir}standard1_3.dll`);
+                    if (!error)
+                        console.log('Successfully injected!');
+                    else
+                        console.log('Injection failed. Error Code:', error);
+                } else consolelog(`Game not running?`);
+                break;
+        }
+
+        return;
+        // PART 2 - The building.
+
+        var resp = await fetch(`https://api.github.com/repos/${`modio/modio-ue4`}/releases/latest`);
+        resp = await resp.json();
+        if (resp.message) return r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
+        var asset = resp.assets.find(x => x.name.includes(`modio`)); // download xinput for windows and standard for anything else
+        await download(asset.browser_download_url, dir);
+    })
+};
+
 module.exports.cook = () => {
     var logs = ``;
     return new Promise(r => {
-        child.exec(config.CookingCmd)
+        child.exec(config.cmds.Cooking)
             .on('exit', async () => {
                 if (logs.includes(`LogInit: Display: Success - 0 error(s),`))
                     r(true);
@@ -782,7 +867,7 @@ module.exports.pack = (outPath) => {
         fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/.temp/PackageInput/Content/`, { overwrite: true });
         fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/.temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-        child.exec(config.PackingCmd)
+        child.exec(config.cmds.Packing)
             .on('exit', async () => {
                 if (logs.includes(`LogPakFile: Error: Failed to load `)) {
                     consolelog(`Failed to load ${logs.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
@@ -807,7 +892,7 @@ module.exports.unpack = unpack = function (path, outpath = __dirname) {
             if (!outpath.startsWith(`Z:`))
                 outpath = `Z:${outpath}`;
         }
-        const cmd = config.UnPackingCmd.replace(`{path}`, path).replace(`{outpath}`, outpath);
+        const cmd = config.cmds.UnPacking.replace(`{path}`, path).replace(`{outpath}`, outpath);
         logFile(`${path}\n${cmd}\n\n`)
         child.exec(cmd)
             .on(`exit`, async () => {
@@ -837,8 +922,23 @@ module.exports.unpack = unpack = function (path, outpath = __dirname) {
     })
 }
 
+module.exports.compileall = compileall = function () {
+    return new Promise(r => {
+        const cmd = config.cmds.CompileAll;
+        logFile(`\n${cmd}\n\n`)
+        child.exec(cmd)
+            .on(`exit`, async () => {
+                var d = fs.readFileSync(config.logs);
+                if (d.includes(`With 0 error(s)`))
+                    consolelog(`Compiled sucessfully`);
+                else consolelog(`Compiled failed`);
+                r();
+            })
+            .stdout.on('data', (d) => logFile(String(d)));
+    })
+}
 
-module.exports.backup = backup = function (full) {
+module.exports.backup = backup = function (full = false, limit = config.backup.max != -1) {
     return new Promise(async r => {
         try {
             if (full)
@@ -846,7 +946,7 @@ module.exports.backup = backup = function (full) {
             else
                 consolelog(`Making backup...`);
             fs.mkdirsSync(`${__dirname}/backups`);
-            if (config.backup.max != -1) {
+            if (limit) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
                     if (isNaN(aid)) return;
@@ -890,6 +990,7 @@ module.exports.backup = backup = function (full) {
                 }
             }
             // full is just an addition, load it yourself. (load backup list should have a tag for if its a full) (too lazy rn)
+            if (!fs.existsSync(`${ProjectPath}Content/${config.ModName}`)) return r(consolelog(`Failed to make backup couse "${config.ModName}" dosent exist in the content folder!`));
             fs.copySync(`${ProjectPath}Content/${config.ModName}`, `${buf}/${config.ModName}`);
             if (config.backup.pak)
                 fs.copySync(`${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
@@ -898,6 +999,8 @@ module.exports.backup = backup = function (full) {
                 fs.rmSync(buf, { recursive: true, force: true })
             }
             //console.log(searchDir(buf, config.backup.blacklist));
+
+            // remove blacklisted items
             if (config.backup.blacklist.length != 0)
                 searchDir(buf, config.backup.blacklist)
                     .forEach(x => fs.rmSync(x, { recursive: true, force: true }));
@@ -1031,8 +1134,7 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/P
         .stdout.on('data', (d) => logFile(String(d)));
 }
 
-async function update() {
-    const repo = `MrCreaper/drg-linux-modding`;
+async function update(repo = `MrCreaper/drg-linux-modding`) {
     if (!repo) return;
     const version = require(`./package.json`).version;
     return new Promise(async r => {
@@ -1163,17 +1265,17 @@ async function updateProject(updateTemplate = true, updateUnpack = true) {
 async function startDrg() {
     return new Promise(async r => {
         await killDrg();
-        consolelog(`Launching DRG...`);
+        var log = consolelog(`Launching DRG...`);
         var exited = false;
         setTimeout(() => {
             if (exited) return;
-            consolelog(`Timedout launching DRG`);
+            consolelog(`Timedout launching DRG`, undefined, undefined, undefined, log);
             r();
         }, 10000);
         child.exec(`steam steam://rungameid/548430`)
             .on(`exit`, () => {
                 exited = true;
-                consolelog(`Lauched DRG`); // most likely
+                consolelog(`Launched DRG`, undefined, undefined, undefined, log); // most likely
                 r();
             })
             .on(`message`, (d) => logFile(String(d)))
@@ -1224,6 +1326,7 @@ process.on('SIGUSR1', exitHandler);
 process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
+if (!fs.existsSync(config.logs)) return console.log(`Something has gone wrong.\nAs in configs havent updated`);
 fs.writeFileSync(config.logs, ``);
 
 if (module.parent) return; // required as a module
@@ -1435,6 +1538,11 @@ if (module.parent) return; // required as a module
                                     color: `#ff00ff`,
                                     run: () => updateProject(false, true),
                                 },
+                                {
+                                    name: `generate template`,
+                                    color: `#ff00ff`,
+                                    run: template,
+                                },
                             ];
                             selected = 0;
                         },
@@ -1477,6 +1585,11 @@ if (module.parent) return; // required as a module
                             ];
                             selected = 0;
                         },
+                    },
+                    {
+                        name: `compile all`,
+                        color: `#03a5fc`,
+                        run: compileall,
                     },
                     {
                         name: `full backup`,
@@ -1589,6 +1702,30 @@ if (module.parent) return; // required as a module
                                                 consolelog(`Deleted ${x}`);
                                             }
                                         });
+                                        consolelog(`Cleared`);
+                                    },
+                                },
+                                {
+                                    name: `clear DerivedDataCache`,
+                                    color: `#ffffff`,
+                                    run: () => {
+                                        [
+                                            `${ProjectPath}DerivedDataCache`,
+                                        ].forEach(x => {
+                                            if (fs.existsSync(x)) {
+                                                fs.rmSync(x, { recursive: true, force: true });
+                                                consolelog(`Deleted ${x}`);
+                                            }
+                                        });
+                                        consolelog(`Cleared`);
+                                    },
+                                },
+                                {
+                                    name: `go go`,
+                                    color: `#ffffff`,
+                                    run: () => {
+                                        fs.rmSync(`${config.drg}/FSD/Content/Movies`, { recursive: true, force: true });
+                                        fs.rmSync(`${config.drg}/FSD/Content/Splash`, { recursive: true, force: true });
                                         consolelog(`Cleared`);
                                     },
                                 },
@@ -1763,6 +1900,7 @@ if (module.parent) return; // required as a module
             lastFittedLogsLength = fittedLogs.length;
             draw();
         });
+        process.stdout.on(`resize`, () => draw());
         function draw(clean = false, options = selectedMenu) {
             // clear old drawing
             /*for (var i = 0; i < process.stdout.rows; i++) {
@@ -1787,8 +1925,48 @@ if (module.parent) return; // required as a module
                     if (longestOption < l) longestOption = l;
                 });
 
+                function limitOptionsList(options = [], selected = 0, limit = 5) {
+                    var takenFromTop = false;
+                    var takenFromBottom = false;
+                    var removed = 0;
+                    var removedTop = 0;
+                    var removedBottom = 0;
+                    var ticked = false;
+                    var opts = options.filter((x, i) => {
+                        var distanceFromSelected = Math.abs(i - selected);
+                        var keep = distanceFromSelected < Math.ceil(limit / 2); // keep it?
+                        if (!keep) removed++;
+                        if (!keep && !ticked) removedTop++;
+                        if (!keep && ticked) removedBottom++;
+                        if (keep && !ticked) ticked = true;
+                        //keep = keep || removed < limit-1;
+                        if (!keep && i == 0) takenFromTop = true;
+                        if (!keep && i == options.length - 1) takenFromBottom = true;
+                        if (keep) x.name = `i:${i} dist:${distanceFromSelected} | ${selected} ${Math.ceil(limit / 2)}`;
+                        return keep;
+                    });
+                    if (takenFromTop) {
+                        opts.splice(0, 0, {
+                            name: `...`,
+                            color: `#ffffff`,
+                        });
+                        selectPush--;
+                    }
+                    selectPush += removedTop;
+                    if (takenFromBottom)
+                        opts.splice(opts.length, 0, {
+                            name: `...`,
+                            color: `#ffffff`,
+                        });
+                    return opts;
+                }
+
+                //var selectPush = 0;
+                //options = limitOptionsList(options, selected);
+                Selected = selected //+ selectPush;
+
                 // selection arrows values
-                var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + selected;
+                var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + Selected;
                 var left = Math.floor(process.stdout.columns * .5 - longestOption * .5) - 2 + (selecting ? +1 : 0);
                 var right = Math.floor(process.stdout.columns * .5 + longestOption * .5) + 1 + (selecting ? -1 : 0);
 
@@ -1800,8 +1978,8 @@ if (module.parent) return; // required as a module
                 options.forEach((x, i) => {
                     var name = dyn(x.name, x);
                     var nameNC = removeColor(name);
-                    if (!config.ui.selectArrows && selected == i)
-                        var nameC = chalk.bgHex(dyn(x.color || `#ffffff`, x))(name);
+                    if (!config.ui.selectArrows && Selected == i)
+                        var nameC = chalk.bgHex(dyn(x.color || `#808080`, x))(name);
                     else
                         var nameC = x.color ? chalk.hex(dyn(x.color, x))(name) : name; // color if there is a name
                     var opt = clean ? ``.padStart(nameNC.length, ` `) : nameC;
@@ -1966,7 +2144,7 @@ if (module.parent) return; // required as a module
     function pack() {
         return new Promise(r => {
             consolelog(`packing...`);
-            logFile(`\n${config.PackingCmd}\n\n`);
+            logFile(`\n${config.cmds.Packing}\n\n`);
 
             if (fs.existsSync(`${__dirname}/.temp/`))
                 fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
@@ -1976,7 +2154,7 @@ if (module.parent) return; // required as a module
             fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/.temp/PackageInput/Content/`, { overwrite: true });
             fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/.temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
-            var ch = child.exec(config.PackingCmd)
+            var ch = child.exec(config.cmds.Packing)
                 .on('exit', async () => {
                     var d = fs.readFileSync(config.logs);
                     if (d.includes(`LogPakFile: Error: Failed to load `)) {
@@ -1987,7 +2165,7 @@ if (module.parent) return; // required as a module
                     fs.mkdirSync(`${config.drg}/FSD/Mods/${config.ModName}`);
                     if (!fs.existsSync(`${__dirname}/.temp/${config.ModName}.pak`)) {
                         var wrongCook = fs.readdirSync(`${__dirname}/.temp/`).find(x => x.endsWith(`.pak`));
-                        consolelog(`Failed to cook correct project :)\nYour command:\n${config.PackingCmd.replace(wrongCook, chalk.red(wrongCook))}`);
+                        consolelog(`Failed to cook correct project :)\nYour command:\n${config.cmds.Packing.replace(wrongCook, chalk.red(wrongCook))}`);
                         return r();
                     }
                     fs.renameSync(`${__dirname}/.temp/${config.ModName}.pak`, `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
@@ -2085,9 +2263,9 @@ if (module.parent) return; // required as a module
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
             consolelog(`cooking...`);
             refreshDirsToNeverCook();
-            logFile(`\n${config.CookingCmd}\n\n`);
+            logFile(`\n${config.cmds.Cooking}\n\n`);
             killDrg();
-            var ch = child.exec(config.CookingCmd);
+            var ch = child.exec(config.cmds.Cooking);
             ch.on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
                 if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
