@@ -6,9 +6,10 @@ const https = require(`https`);
 const os = require(`os`);
 const chalk = require(`chalk`);
 const zl = require("zip-lib");
-var crypto = require('crypto');
-var FormData = require('form-data');
+const crypto = require('crypto');
+const FormData = require('form-data');
 const readline = require(`readline`);
+const ini = require('ini');
 const { EventEmitter } = require(`events`);
 class Emitter extends EventEmitter { }
 const consoleloge = new Emitter();
@@ -314,7 +315,7 @@ var config = {
 
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 const ProjectPath = PATH.resolve(`${__dirname}${config.ProjectFile}`).replace(PATH.basename(config.ProjectFile), ``);
-const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine
+const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine (dirname dosent end with /)
 
 var username = os.userInfo().username;
 
@@ -397,6 +398,7 @@ function writeConfig(c = {}) {
 }
 
 function updatePlatPathVariables(editing = platformPaths, original = originalplatformPaths[platform]) {
+    if (!original) return console.log(`Missing og platform paths?`);
     Object.keys(original).forEach(x => {
         if (typeof editing[x] == `object`)
             editing[x] = updatePlatPathVariables(original[x], editing[x])
@@ -411,12 +413,14 @@ function updatePlatPathVariables(editing = platformPaths, original = originalpla
 }
 
 const wine = fs.existsSync(originalplatformPaths.linuxwine.UnrealEngine.replace(/{me}/g, username));
-const platform = `${os.platform().replace(/[3264]/, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
+const platform = `${os.platform().replace(/[3264]/g, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
 var paths = updatePlatPathVariables(platformPaths[platform]);
 if (!paths) paths = platformPaths.givenUpos;
 
+const runningRoot = process.getuid && process.getuid() == 0; // dosent exist on win?
+
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
-if (process.getuid() != 0) // not running as root
+if (!runningRoot)
     updateConfig();
 async function updateConfig(forceNew = false) {
     if (fs.existsSync(configPath) && !forceNew) {
@@ -742,7 +746,7 @@ module.exports.getFiles = getFiles = async function (gameid = config.modio.gamei
 
 module.exports.publish = publish = async function () {
     return new Promise(async r => {
-        consolelog(`Publising...`);
+        var log = consolelog(`Publising...`);
         var madeZip = false;
         var zip = `${config.drg}/FSD/Mods/${config.ModName}.zip`;
         if (!fs.existsSync(zip)) {
@@ -751,9 +755,9 @@ module.exports.publish = publish = async function () {
         }
         var res = await uploadMod(zip);
         if (!res.filename)
-            consolelog(`Failed to publish`);
+            consolelog(`Failed to publish`, undefined, undefined, undefined, log);
         else {
-            consolelog(`Published! ${chalk.cyan(res.version ? `v${res.version}` : res.filename)}`);
+            consolelog(`Published! ${chalk.cyan(res.version ? `v${res.version}` : res.filename)}`, undefined, undefined, undefined, log);
 
             if (config.modio.deleteOther) {
                 var files = await getFiles();
@@ -771,8 +775,8 @@ module.exports.publish = publish = async function () {
 
 module.exports.template = template = async function () {
     return new Promise(async r => {
-        var ini = require('ini')
-        var dir = `${config.drg}/FSD/Binaries/Win64/TEST/`;
+        const dir = `${config.drg}/FSD/Binaries/Win64/`;
+        fs.mkdirsSync(dir);
 
         var resp = await fetch(`https://api.github.com/repos/${`UE4SS/UE4SS`}/releases/latest`);
         resp = await resp.json();
@@ -795,41 +799,60 @@ module.exports.template = template = async function () {
             })
         }
 
-        // update UE4SS config
-        var ssconfig = ini.parse(fs.readFileSync(`${dir}UE4SS-settings.ini`, 'utf-8'))
-        ssconfig.IgnoreEngineAndCoreUObject = 1;
-        ssconfig.MakeAllFunctionsBlueprintCallable = 1;
-        ssconfig.MakeAllPropertyBlueprintsReadWrite = 1;
-        ssconfig.MakeEnumClassesBlueprintType = 1;
-        fs.writeFileSync(`${dir}UE4SS-settings.ini`, ini.stringify(ssconfig, { section: 'section' }))
+        function updateUESSConfig() {
+            // update UE4SS config
+            var ssconfig = ini.parse(fs.readFileSync(`${dir}UE4SS-settings.ini`, 'utf-8'))
+            ssconfig.IgnoreEngineAndCoreUObject = 1;
+            ssconfig.MakeAllFunctionsBlueprintCallable = 1;
+            ssconfig.MakeAllPropertyBlueprintsReadWrite = 1;
+            ssconfig.MakeEnumClassesBlueprintType = 1;
+            fs.writeFileSync(`${dir}UE4SS-settings.ini`, ini.stringify(ssconfig, { section: 'section' }));
+        }
+        function editMainLua() {
+            var mainLuaPath = `${dir}Mods/UHTCompatibleHeaderGeneratorMod/Scripts/main.lua`;
+            var mainlua = fs.readFileSync(mainLuaPath).toString();
+            var split = mainlua.split(`(`)[1].split(`,`);
+            fs.writeFileSync(mainLuaPath, mainlua.replace(`NUM_NINE`, `V`));
+            return [
+                `V`, //split[0].replace(`Key.`, ``).replace(/_/g, ` `),
+                split[1].replace(/[{}]/g, ``).replace(`ModifierKey.`, ``).replace(/ /g, ``)
+            ]; // keys
+        }
 
+        // No point usind dll-inject since it only works on win and win has xinput :)
         switch (platform) {
             case `win`: // xinput
                 var asset = resp.assets.find(x => x.name.includes(`Xinput`)); // download xinput for windows and standard for anything else
                 await download(asset.browser_download_url, dir);
+                updateUESSConfig();
+                var keys = editMainLua();
                 await startDrg();
-                var mainlua = fs.readFileSync(`${dir}Mods/UHTCompatibleHeaderGeneratorMod/Scripts/main.lua`).toString().split(`(`)[1].split(`,`);
-                consolelog(`When the game has loaded and you've disabled your mods. Press thees keys: ${mainlua[0].replace(`Key.`, ``)} & ${mainlua[1].replace(/[{}]/g, ``).replace(`ModifierKey.`, ``)}`);
+                consolelog(chalk.redBright(`You should see a console pop up when you launched drg, if not, we are screwed.`));
+                consolelog(`When you have loaded in and disabled your mods press ${keys.join(` & `)}`);
                 break;
             default: // standard
                 var asset = resp.assets.find(x => x.name.includes(`Standard`)); // download xinput for windows and standard for anything else
                 await download(asset.browser_download_url, dir);
-                //await startDrg();
-                consolelog(`WARNING: most likely wont work on anything not windows :\\`);
-                const injector = require(`./node_modules/dll-inject/index`);
-                consolelog(injector);
-
-                if (injector.isProcessRunning('notepad.exe')) {
-                    const error = injector.inject('notepad.exe', `${dir}standard1_3.dll`);
-                    if (!error)
-                        console.log('Successfully injected!');
-                    else
-                        console.log('Injection failed. Error Code:', error);
-                } else consolelog(`Game not running?`);
+                updateUESSConfig();
+                var keys = editMainLua();
+                // https://www.youtube.com/watch?v=LpSdNwv_yvQ
+                // https://www.reddit.com/r/linux_gaming/comments/y08u34/how_do_i_use_dll_injection_in_proton/
+                consolelog(`Next we need to inject a dll,\nSteam => DRG => Properties => Set Launch Options:\n\nWINEDLLOVERRIDES="./FSD/Binaries/Win64/ue4ss.dll=n,b" %command%\n\np.s copy from ${config.logs} (so no dumb mistakes)`); //for proton:\nWINEDLLOVERRIDES="${dir}standard1_3.dll=n,b" /path/to/proton/bin/wine executable
+                await waitForDrg();
+                consolelog(chalk.redBright(`You should see a console pop up when you launched drg, if not, we are screwed.`));
+                consolelog(`When you have loaded in and disabled your mods press ${keys.join(` & `)}`);
                 break;
         }
 
-        return;
+        // wait for export
+        await new Promise(r => {
+            var int = setInterval(() => {
+                if (fs.existsSync(`${dir}FSD`)) { // update later
+                    clearInterval(int);
+                    r();
+                }
+            }, 5000);
+        });
         // PART 2 - The building.
 
         var resp = await fetch(`https://api.github.com/repos/${`modio/modio-ue4`}/releases/latest`);
@@ -929,6 +952,11 @@ module.exports.compileall = compileall = function () {
         child.exec(cmd)
             .on(`exit`, async () => {
                 var d = fs.readFileSync(config.logs);
+                var split = d.toString().split(`\n`);
+                split.forEach(x => {
+                    if (x.includes(`LogBlueprint: Error:`))
+                        consolelog(x);
+                });
                 if (d.includes(`With 0 error(s)`))
                     consolelog(`Compiled sucessfully`);
                 else consolelog(`Compiled failed`);
@@ -942,9 +970,9 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
     return new Promise(async r => {
         try {
             if (full)
-                consolelog(`Making FULL backup...`);
+                var log = consolelog(`Making FULL backup...`);
             else
-                consolelog(`Making backup...`);
+                var log = consolelog(`Making backup...`);
             fs.mkdirsSync(`${__dirname}/backups`);
             if (limit) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
@@ -1004,10 +1032,16 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
             if (config.backup.blacklist.length != 0)
                 searchDir(buf, config.backup.blacklist)
                     .forEach(x => fs.rmSync(x, { recursive: true, force: true }));
-            consolelog(`Backup done! id: ${chalk.cyan(id)}`);
-            r();
+            if (fs.readdirSync(buf).length == 0) {
+                consolelog(`Backup validation failed (didnt backup anything?)`, undefined, undefined, undefined, log);
+                fs.rmSync(buf, { recursive: true, force: true })
+                r();
+            } else {
+                consolelog(`Backup done! id: ${chalk.cyan(id)}`, undefined, undefined, undefined, log);
+                r();
+            }
         } catch (error) {
-            consolelog(`Backup error`);
+            consolelog(`Backup error`, undefined, undefined, undefined, log);
             consolelog(error);
             consolelog(`Retrying backup...`);
             r(await module.exports.backup.apply(this, arguments));
@@ -1016,19 +1050,41 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
 };
 
 module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName]) {
+    // cant use ini since it kinda fucks up directories to never cook? (it has the first one in a variable)
     whitelist = whitelist.concat(config.DirsToCook)
+    // get config
     var configFile = `${ProjectPath}Config/DefaultGame.ini`;
     if (!fs.existsSync(configFile)) {
         fs.mkdirsSync(configFile);
         fs.writeFileSync(``, configFile);
         consolelog(`Failed to find ${chalk.redBright(PATH.basename(configFile))}`);
     }
-    var read = fs.readFileSync(configFile, `utf8`);
+    // read
+    var read = fs.readFileSync(configFile, `utf8`).toString();
     read = read.split(getLineBreakChar(read));
-    if (!read.includes(`BuildConfiguration=PPBC_Shipping`)) read.push(`BuildConfiguration=PPBC_Shipping`); // has to be shipping
 
+    // find line
     var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
+    // remove all old never cooks
     read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
+    if (dirsIndex == -1) {
+        // if cant find the variables, find the header
+        var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
+        dirsIndex = read.findIndex(x => x.includes(header));
+        if (dirsIndex == -1) // fuck it, add the header
+            dirsIndex = read.push(header);
+    }
+    var musts = [
+        `BuildConfiguration=PPBC_Shipping`,
+        `UsePakFile=False`,
+    ];
+    musts.forEach(x => {
+        var key = x.split(`=`)[0];
+        var val = x.split(`=`)[1];
+        read = read.filter(x => !x.includes(key));
+        read.splice(dirsIndex, 0, x); // they are in the same "category"
+    });
+    // find and add new never cooks
     fs.readdirSync(`${ProjectPath}Content/`).forEach(x => {
         if (!whitelist.includes(x))
             read.splice(dirsIndex, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
@@ -1052,7 +1108,7 @@ module.exports.loadbackup = loadbackup = async function (id) {
     var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
     if (!backuppath) return consolelog(`Invalid backup id!`);
     var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
-    consolelog(`Loading backup ${folder.split(` - `)[0]} from ${since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]))} ago`);
+    consolelog(`Loading backup ${chalk.cyan(folder.split(` - `)[0])} from ${chalk.cyan(since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1])))} ago`);
 
     if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`) && fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`)) {
         consolelog(`Backup already loaded, removing.`);
@@ -1172,15 +1228,15 @@ async function update(repo = `MrCreaper/drg-linux-modding`) {
     });
 }
 
-async function downloadRepo(path = `${__dirname}/FSD-Template`, repo = `DRG-Modding/FSD-Template`) {
+async function downloadRepo(path = `${__dirname}/FSD-Template`, repo, mLog = -1) {
     if (!repo) return;
+    if (mLog == -1) mLog = logHistory.length;
     return new Promise(async r => {
         https.get(`https://codeload.github.com/${repo}/zip/main`, async res => {
             if (!res.headers['content-length']) {
-                consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`); // ok.
-                return r(await downloadRepo(path));
+                consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
+                return r(await downloadRepo.call(this, ...arguments));
             }
-            var mLog = consolelog(`Updating project...`);
             var size = parseInt(res.headers['content-length']);
             var downloaded = 0;
             consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
@@ -1211,9 +1267,11 @@ async function downloadRepo(path = `${__dirname}/FSD-Template`, repo = `DRG-Modd
 
 async function updateProject(updateTemplate = true, updateUnpack = true) {
     return new Promise(async r => {
+        var mLog = consolelog(`Updating project...`);
+        // update template
         const templatePath = `${__dirname}/.temp/FSD-Template/`;
         if (updateTemplate) {
-            var template = await downloadRepo(templatePath);
+            var template = await downloadRepo(templatePath, `DRG-Modding/FSD-Template`, mLog);
             if (template != true) return r(consolelog(`Failed to download template`));
             // Remove cringe
             fs.rmSync(`${templatePath}Content/`, { recursive: true, force: true });
@@ -1222,10 +1280,12 @@ async function updateProject(updateTemplate = true, updateUnpack = true) {
                 `Binaries`,
                 `Plugins`,
                 `Source`,
-                `FSD.uproject`
+                `FSD.uproject`,
+                `Config`,
             ].map(x => `${templatePath}${x}`);
         }
 
+        // update assets
         const unpackPath = `${__dirname}/.temp/unpack/`;
         if (updateUnpack) {
             // unpack drg INTO /unpack
@@ -1233,10 +1293,13 @@ async function updateProject(updateTemplate = true, updateUnpack = true) {
             var unpacked = await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`, unpackPath);
             if (!unpacked) return consolelog(`Failed to unpack drg`);
             consolelog(`Unpacked DRG`, undefined, undefined, undefined, unpackLog);
-            var unpackList = // files we want from the unpack
-                fs.readdirSync(`${unpackPath}FSD/Content`) // just all of fuckin /content
+            // files we want from the unpack
+            var unpackList = [
+                // Content
+                ...fs.readdirSync(`${unpackPath}FSD/Content`)
                     .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
-                    .map(x => `${unpackPath}FSD/Content/${x}`);
+                    .map(x => `Content/${x}`),
+            ].map(x => `${unpackPath}FSD/${x}`);
         }
         // :)
         await backup(true);
@@ -1280,6 +1343,34 @@ async function startDrg() {
             })
             .on(`message`, (d) => logFile(String(d)))
             .stdout.on('data', (d) => logFile(String(d)))
+    })
+}
+
+async function DrgRunning() {
+    return new Promise(async r => {
+        var prcList = await find('name', 'FSD');
+        //consolelog(prcList);
+        var found = false;
+        prcList.forEach(x => {
+            try {
+                if (x.cmd.toLocaleLowerCase().replace(/\\/g, `/`).includes(`/steam/`))
+                    found = true;
+            } catch (error) { }
+        })
+        r(found);
+    })
+}
+
+async function waitForDrg() {
+    return new Promise(async r => {
+        if (await DrgRunning()) return r();
+        else
+            var int = setInterval(async x => {
+                if (await DrgRunning()) {
+                    clearInterval(int);
+                    r();
+                };
+            }, 1000);
     })
 }
 
@@ -1332,7 +1423,7 @@ fs.writeFileSync(config.logs, ``);
 if (module.parent) return; // required as a module
 
 (async () => {
-    if (process.getuid() == 0) {
+    if (runningRoot) {
         consolelog(`Running as root`);
         username = getUsername();
         consolelog(`User: ${chalk.cyan(username)}`);
@@ -1805,13 +1896,13 @@ if (module.parent) return; // required as a module
         var lastPressKey = ``;
         var lastPressDate = 0;
         var selecting = false;
+        var selectedOption;// = selectedMenu[selected];
         process.stdin.on('keypress', (chunk, key) => {
             var k = key.name || key.sequence;
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
             lastPressDate = new Date();
             selectedMenu = selectedMenu.filter(x => x.hidden ? x.hidden() : true);
-            var selectedOption = selectedMenu[selected];
             //console.log(key);
             //consolelog(k);
             switch (k) {
@@ -1876,8 +1967,8 @@ if (module.parent) return; // required as a module
                     return exitHandler();
                 case `C`: // for butter/fat fingers
                 case `c`:
-                    if (key.ctrl) return process.exit();
-                    else cook();
+                    if (key.ctrl)
+                        return process.exit();
                     break;
                 case `tab`:
                     logMode = !logMode;
@@ -1902,10 +1993,6 @@ if (module.parent) return; // required as a module
         });
         process.stdout.on(`resize`, () => draw());
         function draw(clean = false, options = selectedMenu) {
-            // clear old drawing
-            /*for (var i = 0; i < process.stdout.rows; i++) {
-                console.log('\r\n');
-            }*/
             console.clear();
 
             // bg logs
@@ -1925,45 +2012,52 @@ if (module.parent) return; // required as a module
                     if (longestOption < l) longestOption = l;
                 });
 
-                function limitOptionsList(options = [], selected = 0, limit = 5) {
-                    var takenFromTop = false;
-                    var takenFromBottom = false;
+                // make it loop later
+                function limitOptionsList(options = [], selected = 0, limit = process.stdout.rows || 5) {
                     var removed = 0;
+                    var selectPush = 0;
                     var removedTop = 0;
                     var removedBottom = 0;
                     var ticked = false;
                     var opts = options.filter((x, i) => {
                         var distanceFromSelected = Math.abs(i - selected);
-                        var keep = distanceFromSelected < Math.ceil(limit / 2); // keep it?
-                        if (!keep) removed++;
+                        var keep = distanceFromSelected < Math.ceil(limit / 2); // keep it if it is close enogh OR there is more space
                         if (!keep && !ticked) removedTop++;
                         if (!keep && ticked) removedBottom++;
                         if (keep && !ticked) ticked = true;
-                        //keep = keep || removed < limit-1;
-                        if (!keep && i == 0) takenFromTop = true;
-                        if (!keep && i == options.length - 1) takenFromBottom = true;
-                        if (keep) x.name = `i:${i} dist:${distanceFromSelected} | ${selected} ${Math.ceil(limit / 2)}`;
+                        if (!keep) removed++;
+                        //if (keep) x.name = `i:${i} dist:${distanceFromSelected} | ${selected} ${Math.ceil(limit / 2)} | ${options.length} - ${removed} <${limit} = `;
                         return keep;
                     });
-                    if (takenFromTop) {
-                        opts.splice(0, 0, {
+                    /*var loopStartOpts = options.filter((x, i) => {
+                        if (options.length - i < removedTop)
+                            return true;
+                    });
+                    opts.splice(0, 0, ...loopStartOpts);*/
+                    if (removedTop) {
+                        /*opts.splice(0, 0, {
                             name: `...`,
                             color: `#ffffff`,
-                        });
-                        selectPush--;
+                        });*/
+                        removedTop++;
                     }
-                    selectPush += removedTop;
-                    if (takenFromBottom)
+                    /*
+                    if (removedBottom)
                         opts.splice(opts.length, 0, {
                             name: `...`,
                             color: `#ffffff`,
                         });
-                    return opts;
+                        */
+                    selectPush -= removedTop > 1 ? removedTop - 1 : 0;
+                    return {
+                        opts: opts,
+                        push: selectPush,
+                    }
                 }
 
-                //var selectPush = 0;
-                //options = limitOptionsList(options, selected);
-                Selected = selected //+ selectPush;
+                var limit = limitOptionsList(options, selected);
+                options = limit.opts;
+                var Selected = selected + limit.push;
 
                 // selection arrows values
                 var y = Math.floor(process.stdout.rows * .5 - options.length * .5) + Selected;
@@ -1977,7 +2071,9 @@ if (module.parent) return; // required as a module
 
                 options.forEach((x, i) => {
                     var name = dyn(x.name, x);
+                    if (!name) return console.log(`No name for`, x);
                     var nameNC = removeColor(name);
+                    if (Selected == i) selectedOption = x;
                     if (!config.ui.selectArrows && Selected == i)
                         var nameC = chalk.bgHex(dyn(x.color || `#808080`, x))(name);
                     else
@@ -2001,7 +2097,7 @@ if (module.parent) return; // required as a module
                     }
 
                     process.stdout.cursorTo(X, Y); // x=left/right y=up/down
-                    process.stdout.write(opt); true
+                    process.stdout.write(opt);
                 });
 
                 // > selecting arrows <
@@ -2143,11 +2239,14 @@ if (module.parent) return; // required as a module
 
     function pack() {
         return new Promise(r => {
-            consolelog(`packing...`);
             logFile(`\n${config.cmds.Packing}\n\n`);
 
-            if (fs.existsSync(`${__dirname}/.temp/`))
+            var log = consolelog(`packing...`);
+            if (fs.existsSync(`${__dirname}/.temp/`)) {
+                consolelog(`Removing temp...`, undefined, undefined, undefined, log);
                 fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
+                consolelog(`packing...`, undefined, undefined, undefined, log);
+            }
             fs.mkdirSync(`${__dirname}/.temp/`);
             fs.writeFileSync(`${__dirname}/.temp/Input.txt`, `"${W__dirname}/.temp/PackageInput/" "../../../FSD/"`);
             if (!fs.existsSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`));
@@ -2169,7 +2268,7 @@ if (module.parent) return; // required as a module
                         return r();
                     }
                     fs.renameSync(`${__dirname}/.temp/${config.ModName}.pak`, `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
-                    consolelog(`Packed!`);
+                    consolelog(`Packed!`, undefined, undefined, undefined, log);
 
                     /*
                     // Bad fucking idea
@@ -2261,29 +2360,29 @@ if (module.parent) return; // required as a module
         return new Promise(r => {
             startTime = new Date();
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
-            consolelog(`cooking...`);
+            var log = consolelog(`cooking...`);
             refreshDirsToNeverCook();
             logFile(`\n${config.cmds.Cooking}\n\n`);
             killDrg();
             var ch = child.exec(config.cmds.Cooking);
             ch.on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
-                if (d.includes(`LogInit: Display: Success - 0 error(s),`)) {
-                    consolelog(`Cooked!`);
+                d = d
+                replace(/\\/g, `/`)
+                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |\[AssetLog\] |../../|${`Z:${ProjectPath}`}`, `g`), ``);
+                fs.writeFileSync(config.logs, d);
+                if (d.includes(`Success - 0 error(s),`)) {
+                    consolelog(`Cooked!`, undefined, undefined, undefined, log);
                     await pack();
                     r();
-                } else if (d.includes(`LogInit: Display: Failure - `)) {
+                } else if (d.includes(`Failure - `)) {
                     var errs = 0;
                     var errorsLogs = ``;
-                    d.split(`\n`).forEach(x => {
-                        if (!x.includes(`LogInit: Display: `) || !x.includes(` Error: `)) return;
+                    d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
+                        if (!x.includes(` Error: `)) return;
                         errs++;
                         try {
                             var log = x
-                                .split(`[  0]`)[1] // after timestamp
-                                .replace(/LogInit: Display: /g, ``)
-                                .replace(/LogProperty: Error: /g, ``)
-                                .replace(/ Error: /g, ``)
                                 .replace(new RegExp(`Z:`, 'g'), ``)
                                 .replace(new RegExp(W__dirname.replace(`/compiler/`, ``).replace(`\\compiler\\`, ``), 'g'), ``)
                                 //.replace("\\LogInit: Display: .*?\\ Error: ",``) // replace everything between ...
@@ -2315,7 +2414,7 @@ if (module.parent) return; // required as a module
                             errorsLogs += `${x}\n`;
                         }
                     });
-                    consolelog(`Errors ${chalk.redBright(errs)}:\n\n${errorsLogs}`);
+                    consolelog(`Errors ${chalk.redBright(errs)}:\n\n${errorsLogs}`, undefined, undefined, undefined, log);
                     if (logsDisabled) {
                         consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
                         fs.renameSync(config.logs, `${__dirname}/logs.txt`);
@@ -2324,7 +2423,7 @@ if (module.parent) return; // required as a module
                     consolelog(`${errs != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
                     return r();
                 } else {
-                    consolelog(`Failed to cook.`);
+                    consolelog(`Something went very wrong cooking..?`, undefined, undefined, undefined, log);
                     return r();
                 }
             })
