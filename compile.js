@@ -229,6 +229,14 @@ function tXMto24h(time) {
     return sHours + ":" + sMinutes;
 }
 
+const dirSize = async directory => {
+    const { readdir, stat } = require('fs/promises');
+    const files = await readdir(directory);
+    const stats = files.map(file => stat(PATH.join(directory, file)));
+
+    return (await Promise.all(stats)).reduce((accumulator, { size }) => accumulator + size, 0);
+}
+
 /**
  * Clears swap and ram
  * @param {boolean} force 
@@ -245,7 +253,7 @@ async function clearMem(force = config.ClearSwap) {
 }
 
 function removeColor(input) {
-    return input.replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
+    return String(input).replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
 }
 
 function getUsername() {
@@ -261,7 +269,7 @@ var config = {
     UnrealEngine: "", // auto generated
     drg: "", // auto generated
     cmds: {
-        Cooking: "", // auto generated
+        Cooking: "", // auto generated DONT FUCKING USE -Compressed
         Packing: "", // auto generated
         UnPacking: "", // auto generated
         CompileAll: "", // auto generated
@@ -310,8 +318,17 @@ var config = {
         updateCache: true, // update cache for the mod, no download's needed!
         cache: "", // auto generated
     },
+    presets: {
+        "release": {
+            modio: {
+                modid: 1,
+            }
+        }
+    },
     update: true, // automaticlly check for updates
 };
+
+var selectedPresetKey = ``;
 
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 const ProjectPath = PATH.resolve(`${__dirname}${config.ProjectFile}`).replace(PATH.basename(config.ProjectFile), ``);
@@ -330,7 +347,7 @@ const templatePlatformPaths = {
         UnrealEngine: `C:\\Program Files (x86)\\Epic Games\\UE_4.27`,
         drg: `C:\\Program Files (x86)\\Steam\\steamapps\\common\\Deep Rock Galactic`,
         cmds: {
-            Cooking: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate -Compressed`,
+            Cooking: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate`,
             Packing: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
             UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
         },
@@ -342,7 +359,7 @@ const templatePlatformPaths = {
         UnrealEngine: `/home/{me}/Documents/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
         cmds: {
-            Cooking: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates -Compressed`,
+            Cooking: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates`,
             Packing: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt"`,
             UnPacking: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
         },
@@ -354,7 +371,7 @@ const templatePlatformPaths = {
         UnrealEngine: `/home/{me}/Games/epic-games-store/drive_c/Program Files/Epic Games/UE_4.27`,
         drg: `/home/{me}/.local/share/Steam/steamapps/common/Deep Rock Galactic`,
         cmds: {
-            Cooking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook" "-unattended" "-NoLogTimes" "-iterate" "-Compressed" "-NoShaderCooking"`, // -CookAll
+            Cooking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=cook" "-targetplatform=WindowsNoEditor" "-cook" "-unattended" "-NoLogTimes" "-iterate" "-NoShaderCooking" "-auto" "-AUTOCHECKOUTPACKAGES"`, // -CookAll
             CompileAll: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=CompileAllBlueprints" "-unattended" "-NoLogTimes"`,
             Packing: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt"" "-unattended" "-NoLogTimes"`,
             UnPacking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}" "-unattended" "-NoLogTimes"`,
@@ -422,8 +439,8 @@ const runningRoot = process.getuid && process.getuid() == 0; // dosent exist on 
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
 if (!runningRoot)
     updateConfig();
-async function updateConfig(forceNew = false) {
-    if (fs.existsSync(configPath) && !forceNew) {
+async function updateConfig(readFromFile = true) {
+    if (fs.existsSync(configPath) && readFromFile) {
         var tempconfig = fs.readFileSync(configPath);
         if (!isJsonString(tempconfig)) {
             //writeConfig(config);
@@ -569,7 +586,7 @@ function getDateVersion() {
         var patch = 0;
         var todaysVersion = `${utcNow.getUTCFullYear().toString().slice(-2)}.${utcNow.getUTCMonth() + 1}.${utcNow.getUTCDate()}`;
         files.forEach(f => {
-            if (new Date() - new Date(f.date_added) < 86400000 * 100000) // uploaded in the last 24h
+            if (new Date(f.date_added) * 1000 > new Date(new Date().getTime() - (24 * 60 * 60 * 1000))) // uploaded in the last 24h
                 patch++;
         });
         // I dont really want to use a cache for counting patches...
@@ -652,7 +669,7 @@ module.exports.uploadMod = uploadMod = async (
                 } else {
                     if (resp.error.code == 422) {
                         consolelog(`Stupid error. Retrying.. >:(`);
-                        r(await uploadMod.apply(this, arguments));
+                        r(await uploadMod.call(this, ...arguments));
                     }
                     if (resp.error)
                         consolelog(resp.error);
@@ -903,7 +920,8 @@ module.exports.pack = (outPath) => {
     });
 };
 
-module.exports.unpack = unpack = function (path, outpath = __dirname) {
+module.exports.unpack = unpack = function (path, outpath) {
+    if (!outpath) outpath = `${__dirname}/${PATH.basename(path).split(`.`)[0]}`;
     return new Promise(r => {
         const normalOutPath = outpath;
         fs.mkdirsSync(outpath);
@@ -916,7 +934,7 @@ module.exports.unpack = unpack = function (path, outpath = __dirname) {
                 outpath = `Z:${outpath}`;
         }
         const cmd = config.cmds.UnPacking.replace(`{path}`, path).replace(`{outpath}`, outpath);
-        logFile(`${path}\n${cmd}\n\n`)
+        logFile(`${path}\n${outpath}\n${cmd}\n\n`)
         child.exec(cmd)
             .on(`exit`, async () => {
                 var d = fs.readFileSync(config.logs);
@@ -925,21 +943,20 @@ module.exports.unpack = unpack = function (path, outpath = __dirname) {
                     r(false);
                     return;
                 }
-                if (!wine)
-                    r(true)
-                else {
-                    var waitingLog = -1;
-                    fs.mkdirsSync(`${normalOutPath}/FSD/Content/`);
-                    var x = setInterval(() => {
-                        if (fs.existsSync(`${normalOutPath}/FSD/Content/`) && fs.readdirSync(`${normalOutPath}/FSD/Content/`).length == 22) {
-                            clearInterval(x);
-                            if (waitingLog != -1)
-                                waitingLog = consolelog(`All files found.`, undefined, undefined, undefined, waitingLog);
-                            r(true) // I think sometimes FSD just dosent appear as its done? Something something wine?
-                        } else
-                            waitingLog = consolelog(`Waiting on FSD content to appear ${fs.readdirSync(`${normalOutPath}/FSD/Content/`).length}/22`, undefined, undefined, undefined, waitingLog);
-                    }, 5000);
-                }
+                if (!path.includes(`FSD-WindowsNoEditor`)) return r(true);
+                // is drg
+                if (!wine) return r(true);
+                var waitingLog = -1;
+                fs.mkdirsSync(`${normalOutPath}/FSD/Content/`);
+                var x = setInterval(() => {
+                    if (fs.existsSync(`${normalOutPath}/FSD/Content/`) && fs.readdirSync(`${normalOutPath}/FSD/Content/`).length == 22) {
+                        clearInterval(x);
+                        if (waitingLog != -1)
+                            waitingLog = consolelog(`All files found.`, undefined, undefined, undefined, waitingLog);
+                        r(true) // I think sometimes FSD just dosent appear as its done? Something something wine?
+                    } else
+                        waitingLog = consolelog(`Waiting on FSD content to appear ${fs.readdirSync(`${normalOutPath}/FSD/Content/`).length}/22`, undefined, undefined, undefined, waitingLog);
+                }, 5000);
             })
             .stdout.on('data', (d) => logFile(String(d)));
     })
@@ -990,8 +1007,11 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
                 }); // oldest => newest
                 backups.forEach((x, i) => {
                     //if(i == 0) return; // keep oldest as a keepsake
-                    if (backups.length - i - 1 > config.backup.max)
+                    if (backups.length - i - 1 > config.backup.max) {
+                        var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
                         fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                        consolelog(`Deleted old backup ${chalk.red(x)}`, undefined, undefined, undefined, l);
+                    }
                 });
             }
             var id = -1;
@@ -1003,8 +1023,10 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
                     id = xid;
             });
             id++;
+            // actually start backuping
             var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
             fs.mkdirsSync(buf);
+            // full backup
             if (full) {
                 var s = buf.replace(ProjectPath, ``).split(`/`)[0];
                 var paths = fs.readdirSync(ProjectPath);
@@ -1020,8 +1042,22 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
             // full is just an addition, load it yourself. (load backup list should have a tag for if its a full) (too lazy rn)
             if (!fs.existsSync(`${ProjectPath}Content/${config.ModName}`)) return r(consolelog(`Failed to make backup couse "${config.ModName}" dosent exist in the content folder!`));
             fs.copySync(`${ProjectPath}Content/${config.ModName}`, `${buf}/${config.ModName}`);
+            // backup pak
+            var usedPak = `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`;
             if (config.backup.pak)
-                fs.copySync(`${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`, `${buf}/${config.ModName}.pak`);
+                if (!fs.existsSync(usedPak))
+                    consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
+                else
+                    fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
+            // backup info
+            var backupinfo = {
+                id: id,
+                date: new Date(),
+                size: await dirSize(buf),
+                full: full,
+            };
+            fs.writeJSONSync(`${buf}/backupinfo.json`, backupinfo);
+            // zip backup
             if (config.zip.backups) {
                 await zl.archiveFolder(buf, `${buf}.zip`);
                 fs.rmSync(buf, { recursive: true, force: true })
@@ -1077,12 +1113,15 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
     var musts = [
         `BuildConfiguration=PPBC_Shipping`,
         `UsePakFile=False`,
+        `bShareMaterialShaderCode=False`, // https://forums.unrealengine.com/t/why-are-my-materials-not-rendering-after-updating-to-4-25-any-help-is-greatly-appreciated/466154/5
     ];
     musts.forEach(x => {
         var key = x.split(`=`)[0];
         var val = x.split(`=`)[1];
-        read = read.filter(x => !x.includes(key));
-        read.splice(dirsIndex, 0, x); // they are in the same "category"
+        // find old value
+        var i = read.find(x => x.includes(key));
+        // update or add value
+        read.splice(i != -1 ? i : dirsIndex, 0, x); // they are in the same "category"
     });
     // find and add new never cooks
     fs.readdirSync(`${ProjectPath}Content/`).forEach(x => {
@@ -1307,16 +1346,21 @@ async function updateProject(updateTemplate = true, updateUnpack = true) {
         var done = 0;
         var updateList = [].concat(templateFiles, unpackList);
         for (var i = 0; i < updateList.length; i++) {
-            var x = updateList[i];
-            var dest = `${ProjectPath}${x.replace(templatePath, ``).replace(`${unpackPath}FSD/`, ``)}`;
-            fs.rmSync(dest, { recursive: true, force: true });
-            if (!fs.existsSync(x))
-                consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(x))}"\nMissing: ${x}`);
-            else {
-                var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(x))}`);
-                fs.moveSync(x, dest, { overwrite: true });
-                consolelog(`Updated ${chalk.cyan(PATH.basename(x))}`, undefined, undefined, undefined, logI);
-                done++;
+            try {
+                var x = updateList[i];
+                var dest = `${ProjectPath}${x.replace(templatePath, ``).replace(`${unpackPath}FSD/`, ``)}`;
+                fs.rmSync(dest, { recursive: true, force: true });
+                if (!fs.existsSync(x))
+                    consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(x))}"\nMissing: ${x}`);
+                else {
+                    var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(x))}`);
+                    fs.moveSync(x, dest, { overwrite: true });
+                    consolelog(`Updated ${chalk.cyan(PATH.basename(x))}`, undefined, undefined, undefined, logI);
+                    done++;
+                }
+            } catch (e) {
+                consolelog(`ERROR ${chalk.red(x)}`, undefined, undefined, undefined, logI);
+                consolelog(e);
             }
         }
         consolelog(`Updated ${chalk.cyan(done)}/${chalk.cyan(updateList.length)}${done == updateList.length ? ` ${chalk.greenBright(`PERFECT!`)}` : ``}`);
@@ -1688,10 +1732,71 @@ if (module.parent) return; // required as a module
                         run: () => backup(true),
                     },
                     {
+                        name: `presets`,
+                        color: `#ffffff`,
+                        run: (self) => {
+                            function setPreset(key) {
+                                var preset = config.presets[key];
+                                if (!preset) return updateConfig(true); // reset
+                                selectedPresetKey = key;
+                                function applyPreset(set = preset, path = []) {
+                                    Object.keys(set).forEach(key => {
+                                        function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                            stack = stack.concat([key]);
+                                            while (stack.length > 1) {
+                                                object = object[stack.shift()];
+                                            }
+                                            return object[stack.shift()] = newValue;
+                                        }
+                                        function get(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                            stack = stack.concat([key]);
+                                            while (stack.length > 1) {
+                                                object = object[stack.shift()];
+                                            }
+                                            return object[stack.shift()];
+                                        }
+
+                                        var val = vars[key];
+                                        if (typeof val != typeof get()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof get()}"`);
+
+                                        if (typeof val == `object`) return applyPreset(val, path.concat([key]));
+                                        consolelog(`${key}: ${get()} => ${val}`);
+                                        set(val);
+                                    });
+                                }
+                            }
+                            var presetMenu = [
+                                {
+                                    name: `back`,
+                                    color: `#00FFFF`,
+                                    run: () => {
+                                        selectedMenu = debugMenu;
+                                    }
+                                },
+                            ];
+                            Object.keys(config.presets).forEach(key => {
+                                var val = vars[key];
+                                var name = `${key}`;
+                                if (selectedPresetKey == key)
+                                    name = `> ${name} <`
+                                presetMenu.push(
+                                    {
+                                        name: name,
+                                        run: () => {
+                                            setPreset(key);
+                                        },
+                                    }
+                                );
+                            });
+                            selectedMenu = presetMenu;
+                            selected = 0;
+                        },
+                    },
+                    {
                         name: `debug`,
                         color: `#00ff00`,
                         run: (self) => {
-                            selectedMenu = [
+                            var debugMenu = [
                                 {
                                     name: `back`,
                                     color: `#00FFFF`,
@@ -1785,13 +1890,16 @@ if (module.parent) return; // required as a module
                                             `${ProjectPath}Saved`,
                                             `${ProjectPath}DerivedDataCache`,
                                             `${ProjectPath}Content/PipelineCaches`, // actually fucking required for the /Source
-                                            `${config.UnrealEngine}Engine/Source/Runtime/Applie/MetalRHI/Private/Shaders`,
-                                            `${config.UnrealEngine}Engine/Source/Binaries/Win64/MetalRHI/Private/Shaders`,
+                                            `${config.UnrealEngine}/Engine/Source/Runtime/Applie/MetalRHI/Private/Shaders`,
+                                            `${config.UnrealEngine}/Engine/Source/Binaries/Win64/MetalRHI/Private/Shaders`,
+                                            `${config.UnrealEngine}/Engine/DerivedDataCache`,
+                                            //`${config.UnrealEngine}/Engine/Intermediate`,
                                         ].forEach(x => {
                                             if (fs.existsSync(x)) {
                                                 fs.rmSync(x, { recursive: true, force: true });
-                                                consolelog(`Deleted ${x}`);
-                                            }
+                                                consolelog(chalk.green(x));
+                                            } else
+                                                consolelog(chalk.red(x));
                                         });
                                         consolelog(`Cleared`);
                                     },
@@ -1843,7 +1951,76 @@ if (module.parent) return; // required as a module
                                     color: `#ffffff`,
                                     run: () => refreshDirsToNeverCook(),
                                 },
+                                {
+                                    name: `notes`,
+                                    color: `#ffffff`,
+                                    run: (self) => {
+                                        var vars = {
+                                            "game log": `-log=${__dirname}/fuckinglogs.txt`,
+                                        };
+                                        var varsMenu = [
+                                            {
+                                                name: `back`,
+                                                color: `#00FFFF`,
+                                                run: () => {
+                                                    selectedMenu = debugMenu;
+                                                }
+                                            },
+                                        ];
+                                        Object.keys(vars).forEach(key => {
+                                            var val = vars[key];
+                                            varsMenu.push(
+                                                {
+                                                    name: `${key}:`,
+                                                }
+                                            );
+                                            varsMenu.push(
+                                                {
+                                                    name: `${val}`,
+                                                }
+                                            );
+                                        });
+                                        selectedMenu = varsMenu;
+                                        selected = 0;
+                                    },
+                                },
+                                {
+                                    name: `vars`,
+                                    color: `#ff00ff`,
+                                    run: (self) => {
+                                        var vars = {
+                                            "dirname": __dirname,
+                                            "Project path": ProjectPath,
+                                            "Platform": platform,
+                                        };
+                                        var varsMenu = [
+                                            {
+                                                name: `back`,
+                                                color: `#00FFFF`,
+                                                run: () => {
+                                                    selectedMenu = debugMenu;
+                                                }
+                                            },
+                                        ];
+                                        Object.keys(vars).forEach(key => {
+                                            var val = vars[key];
+                                            varsMenu.push(
+                                                {
+                                                    name: `${key}:`,
+                                                }
+                                            );
+                                            varsMenu.push(
+                                                {
+                                                    name: `${val}`,
+                                                }
+                                            );
+                                        });
+                                        selectedMenu = varsMenu;
+                                        selected = 0;
+                                    },
+                                },
                             ];
+                            selectedMenu = debugMenu;
                             selected = 0;
                         },
                         hidden: () => !process.pkg,
@@ -2148,9 +2325,13 @@ if (module.parent) return; // required as a module
     }
 
     // unpack from argument
-    var unpackFile = process.argv.find(x => x.includes(`.pak`));
+    var unpackFile = process.argv.slice(2).join(` `);
 
-    if (unpackFile) return unpack(unpackFile);
+    if (unpackFile.endsWith(`.pak`))
+        if (!fs.existsSync(unpackFile))
+            return consolelog(`Invalid pakfile path\n${unpackFile}`);
+        else
+            return unpack(unpackFile);
 
     if (config.logConfig)
         logConfig(config);
@@ -2368,8 +2549,12 @@ if (module.parent) return; // required as a module
             ch.on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
                 d = d
-                replace(/\\/g, `/`)
-                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |\[AssetLog\] |../../|${`Z:${ProjectPath}`}`, `g`), ``);
+                    //.replace(/\\/g, `/`)
+                    .replace(/\[AssetLog\] /g, ``)
+                    //.replace(/\.\.\//g, ``)
+                    // | The asset will be loaded but may be incompatible.|
+                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |${`Z:${ProjectPath}`}|Content/|LogVSAccessor: `, `g`), ``)
+                ProjectPath.split(`/`).forEach(x => d = d.replace(new RegExp(`${x}/`, `g`), ``));
                 fs.writeFileSync(config.logs, d);
                 if (d.includes(`Success - 0 error(s),`)) {
                     consolelog(`Cooked!`, undefined, undefined, undefined, log);
@@ -2378,10 +2563,10 @@ if (module.parent) return; // required as a module
                 } else if (d.includes(`Failure - `)) {
                     var errs = 0;
                     var errorsLogs = ``;
-                    d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
-                        if (!x.includes(` Error: `)) return;
-                        errs++;
-                        try {
+                    try {
+                        d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
+                            if (!x.includes(` Error: `)) return;
+                            errs++;
                             var log = x
                                 .replace(new RegExp(`Z:`, 'g'), ``)
                                 .replace(new RegExp(W__dirname.replace(`/compiler/`, ``).replace(`\\compiler\\`, ``), 'g'), ``)
@@ -2408,12 +2593,12 @@ if (module.parent) return; // required as a module
                                 log = log.replace(`.${log.split(` `).find(x => x.includes(`.`)).split(`.`)[1]}`, ``) // weird function.function thing
                             }
                             errorsLogs += `${log}\n`;
-                        } catch (err) {
-                            consolelog(`BEAUTY ERROR: ${x}`);
-                            consolelog(err);
-                            errorsLogs += `${x}\n`;
-                        }
-                    });
+                        });
+                    } catch (err) {
+                        logFile(`BEAUTY ERROR:`);
+                        logFile(err);
+                        //errorsLogs += `${x}\n`;
+                    }
                     consolelog(`Errors ${chalk.redBright(errs)}:\n\n${errorsLogs}`, undefined, undefined, undefined, log);
                     if (logsDisabled) {
                         consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
