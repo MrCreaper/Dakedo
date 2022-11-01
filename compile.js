@@ -204,6 +204,33 @@ function formatTime(time) {
         return time;
 }
 
+/**
+ * Format bytes as human-readable text.
+ * 
+ * @param bytes Number of bytes.
+ * @param si True to use metric (SI) units, aka powers of 1000. False to use 
+ *           binary (IEC), aka powers of 1024.
+ * @param dp Number of decimal places to display.
+ * 
+ * @return Formatted string.
+ */
+function humanFileSize(bytes, si = false, dp = 1) {
+    const thresh = si ? 1000 : 1024;
+    if (Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+    const units = si
+        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    let u = -1;
+    const r = 10 ** dp;
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+    return bytes.toFixed(dp) + ' ' + units[u];
+}
+
 function t24hToXM(time) {
     // Check correct time format and split into components
     time = time.toString().match(/^([01]\d|2[0-3])(:)([0-5]\d)(:[0-5]\d)?$/) || [time];
@@ -275,7 +302,9 @@ var config = {
         CompileAll: "", // auto generated
     },
     logs: "{dir}/logs.txt", // empty for no logs
-    externalLog: "", // show new logs from another file
+    externalLog: [
+        "{drg}/Saved/Logs/logs.txt"
+    ], // show new logs from another file
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
     logConfig: false, // only on cmd version
@@ -537,24 +566,26 @@ async function updateConfig(readFromFile = true) {
         })
     }
     if (config.externalLog)
-        if (!fs.existsSync(config.externalLog))
-            consolelog(`Invalid externalLog ${config.externalLog}`);
-        else {
-            var externalLogsStart = fs.readFileSync(config.externalLog).toString().length;
-            fs.watchFile(config.externalLog, async (curr, prev) => {
-                if (!fs.existsSync(config.externalLog)) return consolelog(`Failed to find externallog? Its probably fine, il just check again...`);
-                var read = fs.readFileSync(config.externalLog).toString().slice(externalLogsStart).replace(/ /g, ``).replace(/[^\x00-\x7F]/g, ""); // so much simpler but whatever
-                externalLogsStart += read.length;
-                //consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read), undefined, false); // remove starting new line and header
-                read.split(`\n`).forEach(x => consolelog(chalk.cyan(x)));
-                /*var log = await readAt(config.externalLog, externalLogsStart); // I just had to worry about non-existent 50gb log files of all things :\
-                consolelog(chalk.cyan(log.startsWith(`\n`) ? log.replace(`\n`, ``) : log));
-                if (log.length)`
-                    externalLogsStart += log.length;
-                else
-                    externalLogsStart = 0;*/
-            });
-        }
+        config.externalLog.forEach(ext => {
+            if (!fs.existsSync(ext))
+                consolelog(`Invalid externalLog ${ext}`);
+            else {
+                var externalLogsStart = fs.readFileSync(ext).toString().length;
+                fs.watchFile(ext, async (curr, prev) => {
+                    if (!fs.existsSync(ext)) return consolelog(`Failed to find externallog? Its probably fine, il just check again...`);
+                    var read = fs.readFileSync(ext).toString().slice(externalLogsStart).replace(/ /g, ``).replace(/[^\x00-\x7F]/g, ""); // so much simpler but whatever
+                    externalLogsStart += read.length;
+                    //consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read), undefined, false); // remove starting new line and header
+                    read.split(`\n`).forEach(x => consolelog(chalk.cyan(x)));
+                    /*var log = await readAt(config.externalLog, externalLogsStart); // I just had to worry about non-existent 50gb log files of all things :\
+                    consolelog(chalk.cyan(log.startsWith(`\n`) ? log.replace(`\n`, ``) : log));
+                    if (log.length)`
+                        externalLogsStart += log.length;
+                    else
+                        externalLogsStart = 0;*/
+                });
+            }
+        });
 }
 
 function logFile(log) {
@@ -669,7 +700,7 @@ module.exports.uploadMod = uploadMod = async (
                 } else {
                     if (resp.error.code == 422) {
                         consolelog(`Stupid error. Retrying.. >:(`);
-                        r(await uploadMod.call(this, ...arguments));
+                        r(await uploadMod.call(null, ...arguments));
                     }
                     if (resp.error)
                         consolelog(resp.error);
@@ -1101,8 +1132,6 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
 
     // find line
     var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
-    // remove all old never cooks
-    read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
     if (dirsIndex == -1) {
         // if cant find the variables, find the header
         var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
@@ -1119,10 +1148,15 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
         var key = x.split(`=`)[0];
         var val = x.split(`=`)[1];
         // find old value
-        var i = read.find(x => x.includes(key));
+        var i = read.findIndex(x => x.includes(key));
         // update or add value
-        read.splice(i != -1 ? i : dirsIndex, 0, x); // they are in the same "category"
+        if (i == -1)
+            read.splice(dirsIndex, 0, x); // add
+        else
+            read.splice(i, 1, x); // update
     });
+    // remove all old never cooks
+    read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
     // find and add new never cooks
     fs.readdirSync(`${ProjectPath}Content/`).forEach(x => {
         if (!whitelist.includes(x))
@@ -1274,7 +1308,7 @@ async function downloadRepo(path = `${__dirname}/FSD-Template`, repo, mLog = -1)
         https.get(`https://codeload.github.com/${repo}/zip/main`, async res => {
             if (!res.headers['content-length']) {
                 consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
-                return r(await downloadRepo.call(this, ...arguments));
+                return r(await downloadRepo.call(null, ...arguments));
             }
             var size = parseInt(res.headers['content-length']);
             var downloaded = 0;
@@ -1880,6 +1914,11 @@ if (module.parent) return; // required as a module
                                     },
                                 },
                                 {
+                                    name: `pack`,
+                                    color: `#ffffff`,
+                                    run: pack,
+                                },
+                                {
                                     name: `clear caches`,
                                     color: `#ffffff`,
                                     run: () => {
@@ -2432,7 +2471,9 @@ if (module.parent) return; // required as a module
             fs.writeFileSync(`${__dirname}/.temp/Input.txt`, `"${W__dirname}/.temp/PackageInput/" "../../../FSD/"`);
             if (!fs.existsSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`));
             fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/.temp/PackageInput/Content/`, { overwrite: true });
-            fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`, `${__dirname}/.temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
+            const assetRegistry = `${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`;
+            if (!fs.existsSync(assetRegistry)) return consolelog(`FAILED TO FIND AssetRegistry.bin ${chalk.gray(assetRegistry)}`);
+            fs.moveSync(assetRegistry, `${__dirname}/.temp/PackageInput/AssetRegistry.bin`, { overwrite: true });
 
             var ch = child.exec(config.cmds.Packing)
                 .on('exit', async () => {
@@ -2549,12 +2590,12 @@ if (module.parent) return; // required as a module
             ch.on('exit', async () => {
                 var d = fs.readFileSync(config.logs, `utf8`);
                 d = d
-                    //.replace(/\\/g, `/`)
+                    .replace(/\\/g, `/`)
                     .replace(/\[AssetLog\] /g, ``)
-                    //.replace(/\.\.\//g, ``)
-                    // | The asset will be loaded but may be incompatible.|
-                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |${`Z:${ProjectPath}`}|Content/|LogVSAccessor: `, `g`), ``)
-                ProjectPath.split(`/`).forEach(x => d = d.replace(new RegExp(`${x}/`, `g`), ``));
+                    .replace(/\.\.\//g, ``)
+                    .replace(/ The asset will be loaded but may be incompatible./g, ``)
+                    .replace(new RegExp(`${`Z:${ProjectPath}`}`), ``)
+                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |LogVSAccessor: |LogContentStreaming: |LogShaderCompilers: `, `g`), ``)
                 fs.writeFileSync(config.logs, d);
                 if (d.includes(`Success - 0 error(s),`)) {
                     consolelog(`Cooked!`, undefined, undefined, undefined, log);
@@ -2563,9 +2604,11 @@ if (module.parent) return; // required as a module
                 } else if (d.includes(`Failure - `)) {
                     var errs = 0;
                     var errorsLogs = ``;
+                    var restart = false;
                     try {
                         d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
                             if (!x.includes(` Error: `)) return;
+                            if (x.includes(`Mismatch size for type `)) restart = true;
                             errs++;
                             var log = x
                                 .replace(new RegExp(`Z:`, 'g'), ``)
@@ -2606,7 +2649,10 @@ if (module.parent) return; // required as a module
                         return r();
                     }
                     consolelog(`${errs != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
-                    return r();
+                    if (restart)
+                        return r(await cook());
+                    else
+                        return r();
                 } else {
                     consolelog(`Something went very wrong cooking..?`, undefined, undefined, undefined, log);
                     return r();

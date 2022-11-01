@@ -23,7 +23,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
     PackingCmd: "", // auto generated
     UnPackingCmd: "", // auto generated
     logs: "./logs.txt", // empty for no logs
-    externalLog: "", // show new logs from another file
+    externalLog: [], // show new logs from another file
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
     logConfig: false, // only on cmd version
@@ -68,6 +68,15 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
     update: true, // automaticlly check for updates
 }
 ```
+
+### Config path variables
+
+- {UnrealEngine}
+- {drg}
+- {me} - username
+- {mod} - modname
+- {pf} - project file (.uproject)
+- {dir} - compiler directory (win on wine)
 
 ## Shortcuts
 
