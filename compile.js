@@ -97,6 +97,29 @@ function filterOffScreenLogs(logs, push = 0) {
     );
 }
 
+/**
+ * Reads a portion of a file
+ * @param {string} path 
+ * @param {number} at 
+ * @returns {promise<string>}
+ */
+function readAt(path, at) {
+    return new Promise(r => {
+        var out = ``;
+        fs.createReadStream(path, { start: at }).on(`data`, d => {
+            out += String(d);
+        }).on(`close`, () => r(out.slice(2))); // I LOVE HIDDEN HEADERS
+    })
+}
+function readLength(path) {
+    return new Promise(r => {
+        var length = 0;
+        fs.createReadStream(path).on(`data`, d => {
+            length += String(d).length;
+        }).on(`close`, () => r(length));
+    })
+}
+
 function since(time) {
     var years = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 365)));
     var months = Math.abs(Math.floor(time / (1000 * 60 * 60 * 24 * 7 * 31)));
@@ -302,9 +325,7 @@ var config = {
         CompileAll: "", // auto generated
     },
     logs: "{dir}/logs.txt", // empty for no logs
-    externalLog: [
-        "{drg}/Saved/Logs/logs.txt"
-    ], // show new logs from another file
+    externalLog: [], // show new logs from another file
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
     logConfig: false, // only on cmd version
@@ -352,7 +373,13 @@ var config = {
             modio: {
                 modid: 1,
             }
-        }
+        },
+        "mod^2": {
+            ModName: `mod2`,
+            modio: {
+                modid: 2,
+            }
+        },
     },
     update: true, // automaticlly check for updates
 };
@@ -439,7 +466,7 @@ const platformPaths = JSON.parse(JSON.stringify(templatePlatformPaths)); // new 
 
 const configPath = `${__dirname}/config.json`;
 
-function writeConfig(c = {}) {
+function writeConfig(c = config) {
     fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
 }
 
@@ -468,20 +495,26 @@ const runningRoot = process.getuid && process.getuid() == 0; // dosent exist on 
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
 if (!runningRoot)
     updateConfig();
-async function updateConfig(readFromFile = true) {
-    if (fs.existsSync(configPath) && readFromFile) {
+async function updateConfig(readFromFile = true, updateFile = true) {
+    console.log(`hi`);
+    if (!fs.existsSync(configPath)) {
+        console.log(`Wrote config.`);
+        writeConfig();
+        return exitHandler();
+    }
+    if (readFromFile) {
         var tempconfig = fs.readFileSync(configPath);
         if (!isJsonString(tempconfig)) {
             //writeConfig(config);
             consolelog("Config is an invalid json, please check it again.");
-            exitHandler();
-            return;
+            return exitHandler();
         }
         tempconfig = JSON.parse(tempconfig);
         config = checkConfig(config, tempconfig);
         function checkConfig(base = {}, check = {}) {
             Object.keys(base).forEach(x => {
-                if (typeof base[x] == `object`)
+                if ([`presets`].includes(x)) return base[x] = check[x];;
+                if (typeof base[x] == `object` && !Array.isArray(base[x]))
                     base[x] = checkConfig(base[x], check[x]);
                 else
                     if (check[x] != undefined && typeof base[x] == typeof check[x])
@@ -508,32 +541,40 @@ async function updateConfig(readFromFile = true) {
         });
         return config;
     }
-    writeConfig(unVaredConfig);
+    if (updateFile)
+        writeConfig(unVaredConfig);
     const tempModName = process.argv.find(x => !x.includes(`/`) && !x.includes(`-`) && fs.existsSync(`${ProjectPath}Content/${x}`));
     if (tempModName) config.ModName = tempModName;
     variable(config);
     function variable(c) {
-        Object.keys(c).forEach(x => {
-            switch (typeof c[x]) {
-                case `object`:
-                    c[x] = variable(c[x]);
-                    break;
-                case `string`:
-                    c[x] = c[x]
-                        .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
-                        .replace(/{drg}/g, config.drg)
-                        .replace(/{me}/g, username)
-                        .replace(/{mod}/g, config.ModName)
-                        .replace(/{pf}/g, config.ProjectFile);
-                    if (platform == `linuxwine`)
-                        c[x] = c[x]
-                            .replace(/{dir}/g, W__dirname); // better to use "{dir}" then "./" since this is running over all configs :)
-                    else
-                        c[x] = c[x]
-                            .replace(/{dir}/g, __dirname);
-                    break;
-            }
-        });
+        if (typeof c == `string`) {
+            var out = c
+                .replace(/{UnrealEngine}/g, platformPaths[platform].UnrealEngine)
+                .replace(/{drg}/g, config.drg)
+                .replace(/{me}/g, username)
+                .replace(/{mod}/g, config.ModName)
+                .replace(/{pf}/g, config.ProjectFile);
+            if (platform == `linuxwine`)
+                out = out
+                    .replace(/{dir}/g, W__dirname); // better to use "{dir}" then "./" since this is running over all configs :)
+            else
+                out = out
+                    .replace(/{dir}/g, __dirname);
+            return out;
+        }
+        if (Array.isArray(c))
+            c = c.map(x => variable(x));
+        else
+            Object.keys(c).forEach(x => {
+                switch (typeof c[x]) {
+                    case `object`:
+                        c[x] = variable(c[x]);
+                        break;
+                    case `string`:
+                        c[x] = variable(c[x]);
+                        break;
+                }
+            });
         return c;
     }
 
@@ -543,28 +584,6 @@ async function updateConfig(readFromFile = true) {
     if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
     if (!fs.existsSync(config.drg)) return consolelog(`Couldnt find drg\nPath: ${config.drg}`);
 
-    /**
-     * Reads a portion of a file
-     * @param {string} path 
-     * @param {number} at 
-     * @returns {promise<string>}
-     */
-    function readAt(path, at) {
-        return new Promise(r => {
-            var out = ``;
-            fs.createReadStream(path, { start: at }).on(`data`, d => {
-                out += String(d);
-            }).on(`close`, () => r(out.slice(2))); // I LOVE HIDDEN HEADERS
-        })
-    }
-    function readLength(path) {
-        return new Promise(r => {
-            var length = 0;
-            fs.createReadStream(path).on(`data`, d => {
-                length += String(d).length;
-            }).on(`close`, () => r(length));
-        })
-    }
     if (config.externalLog)
         config.externalLog.forEach(ext => {
             if (!fs.existsSync(ext))
@@ -638,18 +657,17 @@ module.exports.updateCacheState = updateCache = async (
 ) => {
     return new Promise(async (r, re) => {
         const statePath = `${config.modio.cache}metadata/state.json`
-        if (!fs.existsSync(statePath)) return consolelog(`Failed to find modio cache (state.json)\n${statePath}`);
-        if (!fs.existsSync(pakPath)) return consolelog(`Failed to find cache's new pak.\n${pakPath}`);
+        if (!fs.existsSync(statePath)) return re(consolelog(`Failed to find modio cache (state.json)\n${statePath}`));
+        if (!fs.existsSync(pakPath)) return re(consolelog(`Failed to find cache's new pak.\n${pakPath}`));
         var state = fs.readFileSync(statePath);
-        if (!isJsonString(state)) return consolelog(`MODIO CACHE/STATE IS CORRUPTED. PANIC!!`);
+        if (!isJsonString(state)) return re(consolelog(`MODIO CACHE/STATE IS CORRUPTED. PANIC!!`));
         state = JSON.parse(state);
         var i = state.Mods.findIndex(x => x.ID == modid);
-        if (i == -1) return consolelog(`Not subscribed to mod? (modio cache) ${modid}`);
+        if (i == -1) return re(consolelog(`Not subscribed to mod? (modio cache) id:${modid}`));
         state.Mods[i].Profile.modfile = modFile;
         fs.writeJSONSync(statePath, state);
-        //consolelog(`Updated state`);
         fs.cpSync(pakPath, `${config.modio.cache}mods/${modid}/${modname}.pak`); // copy over old pak
-        consolelog(`Updated modio cache`);
+        consolelog(chalk.gray(`Updated modio cache`));
         r(true);
     })
 };
@@ -662,6 +680,7 @@ module.exports.uploadMod = uploadMod = async (
     meta = ``,
 ) => {
     return new Promise(async (r, re) => {
+        if (typeof zip == `object`) return consolelog(arguments);
         if (!fs.existsSync(zip)) return r(consolelog(`File dosent exist.\n${zip}`));
         if (fs.statSync(zip).size > 5368709120) return r(consolelog(`Zip bigger then 5gb`));
         if (String(version) == `[object Promise]`) version = await version;
@@ -1041,7 +1060,7 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
                     if (backups.length - i - 1 > config.backup.max) {
                         var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
                         fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
-                        consolelog(`Deleted old backup ${chalk.red(x)}`, undefined, undefined, undefined, l);
+                        consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
                     }
                 });
             }
@@ -1307,7 +1326,7 @@ async function downloadRepo(path = `${__dirname}/FSD-Template`, repo, mLog = -1)
     return new Promise(async r => {
         https.get(`https://codeload.github.com/${repo}/zip/main`, async res => {
             if (!res.headers['content-length']) {
-                consolelog(`Failed to start download, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
+                consolelog(`github fuckery, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
                 return r(await downloadRepo.call(null, ...arguments));
             }
             var size = parseInt(res.headers['content-length']);
@@ -1466,7 +1485,7 @@ async function killDrg() {
     })
 }
 
-if (!fs.existsSync(`${ProjectPath}Config/DefaultGame.ini`)) return consolelog(`Couldnt find Config/DefaultGame.ini`);
+if (!fs.existsSync(`${ProjectPath}Config/DefaultGame.ini`)) fs.writeFileSync(`${ProjectPath}Config/DefaultGame.ini`, ``);;
 
 var children = [];
 if (fs.existsSync(`${__dirname}/.temp/`)) { // remove temp folder if exitHandler failed
@@ -1495,7 +1514,6 @@ process.on('SIGUSR1', exitHandler);
 process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
-if (!fs.existsSync(config.logs)) return console.log(`Something has gone wrong.\nAs in configs havent updated`);
 fs.writeFileSync(config.logs, ``);
 
 if (module.parent) return; // required as a module
@@ -1517,7 +1535,7 @@ if (module.parent) return; // required as a module
         {
             name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked` : `cooking`),
             color: `#00ff00`,
-            run: cook,
+            run: () => cook(),
         },
         {
             name: (self) => self.running == undefined ? `publish` : (self.running == false ? `published` : `publishing`),
@@ -1773,16 +1791,17 @@ if (module.parent) return; // required as a module
                                 var preset = config.presets[key];
                                 if (!preset) return updateConfig(true); // reset
                                 selectedPresetKey = key;
+                                applyPreset();
                                 function applyPreset(set = preset, path = []) {
                                     Object.keys(set).forEach(key => {
-                                        function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                        function setV(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
                                             stack = stack.concat([key]);
                                             while (stack.length > 1) {
                                                 object = object[stack.shift()];
                                             }
                                             return object[stack.shift()] = newValue;
                                         }
-                                        function get(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                        function getV(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
                                             stack = stack.concat([key]);
                                             while (stack.length > 1) {
                                                 object = object[stack.shift()];
@@ -1790,26 +1809,28 @@ if (module.parent) return; // required as a module
                                             return object[stack.shift()];
                                         }
 
-                                        var val = vars[key];
-                                        if (typeof val != typeof get()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof get()}"`);
+                                        var val = set[key];
+                                        if (typeof val != typeof getV()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof getV()}"`);
 
                                         if (typeof val == `object`) return applyPreset(val, path.concat([key]));
-                                        consolelog(`${key}: ${get()} => ${val}`);
-                                        set(val);
+                                        consolelog(`${key}: ${getV()} => ${val}`);
+                                        setV(val);
                                     });
                                 }
+                                config = unVaredConfig;
+                                updateConfig(false, false);
                             }
                             var presetMenu = [
                                 {
                                     name: `back`,
                                     color: `#00FFFF`,
                                     run: () => {
-                                        selectedMenu = debugMenu;
+                                        selectedMenu = miscMenu;
                                     }
                                 },
                             ];
                             Object.keys(config.presets).forEach(key => {
-                                var val = vars[key];
+                                var val = config.presets[key];
                                 var name = `${key}`;
                                 if (selectedPresetKey == key)
                                     name = `> ${name} <`
@@ -1917,6 +1938,11 @@ if (module.parent) return; // required as a module
                                     name: `pack`,
                                     color: `#ffffff`,
                                     run: pack,
+                                },
+                                {
+                                    name: (self) => self.running == undefined ? `force cook` : (self.running == false ? `cooked` : `cooking`),
+                                    color: `#ff0000`, // if normal cook is happy green, this is evil red >:)
+                                    run: () => cook(true),
                                 },
                                 {
                                     name: `clear caches`,
@@ -2032,6 +2058,9 @@ if (module.parent) return; // required as a module
                                             "Project path": ProjectPath,
                                             "Platform": platform,
                                         };
+                                        var loggables = {
+                                            "config": config,
+                                        };
                                         var varsMenu = [
                                             {
                                                 name: `back`,
@@ -2051,6 +2080,15 @@ if (module.parent) return; // required as a module
                                             varsMenu.push(
                                                 {
                                                     name: `${val}`,
+                                                }
+                                            );
+                                        });
+                                        Object.keys(loggables).forEach(key => {
+                                            var val = loggables[key];
+                                            varsMenu.push(
+                                                {
+                                                    name: key,
+                                                    run: () => consolelog(val),
                                                 }
                                             );
                                         });
@@ -2578,12 +2616,12 @@ if (module.parent) return; // required as a module
 
     cook();
     var startTime = new Date();
-    function cook() {
+    function cook(force = false) {
         return new Promise(r => {
             startTime = new Date();
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
             var log = consolelog(`cooking...`);
-            refreshDirsToNeverCook();
+            //refreshDirsToNeverCook();
             logFile(`\n${config.cmds.Cooking}\n\n`);
             killDrg();
             var ch = child.exec(config.cmds.Cooking);
@@ -2594,11 +2632,11 @@ if (module.parent) return; // required as a module
                     .replace(/\[AssetLog\] /g, ``)
                     .replace(/\.\.\//g, ``)
                     .replace(/ The asset will be loaded but may be incompatible./g, ``)
-                    .replace(new RegExp(`${`Z:${ProjectPath}`}`), ``)
+                    .replace(new RegExp(`${`Z:${ProjectPath}`}`, `g`), ``)
                     .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |LogVSAccessor: |LogContentStreaming: |LogShaderCompilers: `, `g`), ``)
                 fs.writeFileSync(config.logs, d);
-                if (d.includes(`Success - 0 error(s),`)) {
-                    consolelog(`Cooked!`, undefined, undefined, undefined, log);
+                if (d.includes(`Success - 0 error(s),` || force)) {
+                    consolelog(chalk.greenBright(`Cooked!${!d.includes(`Success - 0 error(s),`) && force ? ` ;)` : ``}`), undefined, undefined, undefined, log);
                     await pack();
                     r();
                 } else if (d.includes(`Failure - `)) {
