@@ -14,15 +14,18 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 ```json
 {
     ProjectName: "FSD",
-    ModName: findModName(),
-    ProjectFile: "/../FSD.uproject",
+    ModName: ``, // auto found
+    ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
     drg: "", // auto generated
-    CookingCmd: "", // auto generated
-    PackingCmd: "", // auto generated
-    UnPackingCmd: "", // auto generated
-    logs: "./logs.txt", // empty for no logs
+    cmds: {
+        Cooking: "", // auto generated DONT FUCKING USE -Compressed
+        Packing: "", // auto generated
+        UnPacking: "", // auto generated
+        CompileAll: "", // auto generated
+    },
+    logs: "{dir}/logs.txt", // empty for no logs
     externalLog: [], // show new logs from another file
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
@@ -39,19 +42,20 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
                 index: 2, // index on list
             },*/
         ],
+        selectArrows: true,
     },
     backup: {
-        folder: "./backups", // leave empty
+        folder: "{dir}/backups", // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
         blacklist: [".git"],
-        //all: false, // backup the entire project
+        all: false, // backup the entire project by default
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["./"], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: ["{dir}/"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
@@ -65,7 +69,20 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
         updateCache: true, // update cache for the mod, no download's needed!
         cache: "", // auto generated
     },
-    update: true, // automaticlly check for updates
+    presets: {
+        "release": {
+            modio: {
+                modid: 1,
+            }
+        },
+        "mod^2": {
+            ModName: `mod2`,
+            modio: {
+                modid: 2,
+            }
+        },
+    },
+    update: true, // automaticlly update
 }
 ```
 
@@ -138,6 +155,11 @@ Build with `npm run pkg`
 [umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
 
 Also if you oh so wish, I have exposed some of the functions.
-So you can just do `var compiler = require('./compile.js')` and mess around.
-It dose use the config.json configs, keep that in mind I guess.
-(or just change the config variable :D)
+So you can just do
+
+```js
+var compiler = require('./compile.js');
+compiler.cook(); // or something
+```
+
+and mess around.

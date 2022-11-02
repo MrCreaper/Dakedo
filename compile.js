@@ -349,12 +349,12 @@ var config = {
         max: 5, // -1 for infinite
         pak: false,
         blacklist: [".git"],
-        //all: false, // backup the entire project
+        all: false, // backup the entire project by default
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["{dir}/"], // folders to place the zip in, add the zip to the mod folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: ["{dir}/"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
@@ -381,7 +381,7 @@ var config = {
             }
         },
     },
-    update: true, // automaticlly check for updates
+    update: true, // automaticlly update
 };
 
 var selectedPresetKey = ``;
@@ -1033,7 +1033,7 @@ module.exports.compileall = compileall = function () {
     })
 }
 
-module.exports.backup = backup = function (full = false, limit = config.backup.max != -1) {
+module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1) {
     return new Promise(async r => {
         try {
             if (full)
@@ -1041,6 +1041,70 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
             else
                 var log = consolelog(`Making backup...`);
             fs.mkdirsSync(`${__dirname}/backups`);
+
+            var id = -1;
+            fs.readdirSync(`${__dirname}/backups`).forEach(x => {
+                var xid = x.split(` - `)[0];
+                if (isNaN(xid) && xid != `0`) return consolelog(`invalid ${x}`);
+                xid = parseInt(xid);
+                if (xid > id)
+                    id = xid;
+            });
+            id++;
+
+            // actually start backuping
+            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
+            fs.mkdirsSync(buf);
+            // full backup
+            if (full) {
+                var s = buf.replace(ProjectPath, ``).split(`/`)[0];
+                var paths = fs.readdirSync(ProjectPath);
+                for (var i = 0; i < paths.length; i++) {
+                    var p = paths[i];
+                    if (p != s) {
+                        var logI = consolelog(`Backuping ${chalk.cyan(p)}`);
+                        fs.copySync(`${ProjectPath}${p}`, `${buf}/${p}`);
+                        consolelog(`Backuped ${chalk.cyan(p)}`, undefined, undefined, undefined, logI);
+                    }
+                }
+            }
+            // full is just an addition, load it yourself.
+            if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`)) // some mods just replace stuff
+                fs.copySync(`${ProjectPath}Content/${config.ModName}`, `${buf}/${config.ModName}`);
+
+            // backup pak
+            var usedPak = `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`;
+            if (config.backup.pak)
+                if (!fs.existsSync(usedPak))
+                    consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
+                else
+                    fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
+
+            // backup info
+            fs.writeJSONSync(`${buf}/backupinfo.json`, {
+                id: id,
+                date: new Date(),
+                size: await dirSize(buf),
+                full: full,
+            });
+
+            // remove blacklisted items
+            if (config.backup.blacklist.length != 0)
+                searchDir(buf, config.backup.blacklist)
+                    .forEach(x => fs.rmSync(x, { recursive: true, force: true }));
+
+            if (fs.readdirSync(buf).length == 0) {
+                consolelog(`Backup validation failed (didnt backup anything?)`, undefined, undefined, undefined, log);
+                fs.rmSync(buf, { recursive: true, force: true })
+                return r();
+            }
+
+            // zip backup
+            if (config.zip.backups) {
+                await zl.archiveFolder(buf, `${buf}.zip`);
+                fs.rmSync(buf, { recursive: true, force: true })
+            }
+
             if (limit) {
                 var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
@@ -1058,79 +1122,20 @@ module.exports.backup = backup = function (full = false, limit = config.backup.m
                 backups.forEach((x, i) => {
                     //if(i == 0) return; // keep oldest as a keepsake
                     if (backups.length - i - 1 > config.backup.max) {
-                        var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
+                        //var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
                         fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
-                        consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
+                        //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
                     }
                 });
             }
-            var id = -1;
-            fs.readdirSync(`${__dirname}/backups`).forEach(x => {
-                var xid = x.split(` - `)[0];
-                if (isNaN(xid) && xid != `0`) return consolelog(`invalid ${x}`);
-                xid = parseInt(xid);
-                if (xid > id)
-                    id = xid;
-            });
-            id++;
-            // actually start backuping
-            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
-            fs.mkdirsSync(buf);
-            // full backup
-            if (full) {
-                var s = buf.replace(ProjectPath, ``).split(`/`)[0];
-                var paths = fs.readdirSync(ProjectPath);
-                for (var i = 0; i < paths.length; i++) {
-                    var p = paths[i];
-                    if (p != s) {
-                        var logI = consolelog(`Backuping ${chalk.cyan(p)}`);
-                        fs.copySync(`${ProjectPath}${p}`, `${buf}/${p}`);
-                        consolelog(`Backuped ${chalk.cyan(p)}`, undefined, undefined, undefined, logI);
-                    }
-                }
-            }
-            // full is just an addition, load it yourself. (load backup list should have a tag for if its a full) (too lazy rn)
-            if (!fs.existsSync(`${ProjectPath}Content/${config.ModName}`)) return r(consolelog(`Failed to make backup couse "${config.ModName}" dosent exist in the content folder!`));
-            fs.copySync(`${ProjectPath}Content/${config.ModName}`, `${buf}/${config.ModName}`);
-            // backup pak
-            var usedPak = `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`;
-            if (config.backup.pak)
-                if (!fs.existsSync(usedPak))
-                    consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
-                else
-                    fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
-            // backup info
-            var backupinfo = {
-                id: id,
-                date: new Date(),
-                size: await dirSize(buf),
-                full: full,
-            };
-            fs.writeJSONSync(`${buf}/backupinfo.json`, backupinfo);
-            // zip backup
-            if (config.zip.backups) {
-                await zl.archiveFolder(buf, `${buf}.zip`);
-                fs.rmSync(buf, { recursive: true, force: true })
-            }
-            //console.log(searchDir(buf, config.backup.blacklist));
 
-            // remove blacklisted items
-            if (config.backup.blacklist.length != 0)
-                searchDir(buf, config.backup.blacklist)
-                    .forEach(x => fs.rmSync(x, { recursive: true, force: true }));
-            if (fs.readdirSync(buf).length == 0) {
-                consolelog(`Backup validation failed (didnt backup anything?)`, undefined, undefined, undefined, log);
-                fs.rmSync(buf, { recursive: true, force: true })
-                r();
-            } else {
-                consolelog(`Backup done! id: ${chalk.cyan(id)}`, undefined, undefined, undefined, log);
-                r();
-            }
+            consolelog(`Backup done! id: ${chalk.cyan(id)}`, undefined, undefined, undefined, log);
+            r(true);
         } catch (error) {
             consolelog(`Backup error`, undefined, undefined, undefined, log);
             consolelog(error);
             consolelog(`Retrying backup...`);
-            r(await module.exports.backup.apply(this, arguments));
+            r(await module.exports.backup.call(null, ...arguments));
         }
     })
 };
@@ -1357,62 +1362,83 @@ async function downloadRepo(path = `${__dirname}/FSD-Template`, repo, mLog = -1)
     });
 };
 
-async function updateProject(updateTemplate = true, updateUnpack = true) {
+async function updateProject(
+    updateTemplate = true,
+    updateUnpack = true,
+    updateToucan = true
+) {
     return new Promise(async r => {
         var mLog = consolelog(`Updating project...`);
+        var updates = {};
         // update template
-        const templatePath = `${__dirname}/.temp/FSD-Template/`;
         if (updateTemplate) {
+            const templatePath = `${__dirname}/.temp/FSD-Template/`;
             var template = await downloadRepo(templatePath, `DRG-Modding/FSD-Template`, mLog);
             if (template != true) return r(consolelog(`Failed to download template`));
             // Remove cringe
             fs.rmSync(`${templatePath}Content/`, { recursive: true, force: true });
 
-            var templateFiles = [ // files we want from the template
+            updates[templatePath] = [ // files we want from the template
                 `Binaries`,
                 `Plugins`,
                 `Source`,
                 `FSD.uproject`,
                 `Config`,
-            ].map(x => `${templatePath}${x}`);
+            ];
         }
 
         // update assets
-        const unpackPath = `${__dirname}/.temp/unpack/`;
         if (updateUnpack) {
+            const unpackPath = `${__dirname}/.temp/unpack/`;
             // unpack drg INTO /unpack
             var unpackLog = consolelog(`Unpacking DRG...`);
             var unpacked = await unpack(`${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`, unpackPath);
             if (!unpacked) return consolelog(`Failed to unpack drg`);
             consolelog(`Unpacked DRG`, undefined, undefined, undefined, unpackLog);
             // files we want from the unpack
-            var unpackList = [
+            updates[`${unpackPath}FSD/`] = [
                 // Content
                 ...fs.readdirSync(`${unpackPath}FSD/Content`)
                     .filter(x => !x.startsWith(`ShaderArchive`) && !x.toLowerCase().includes(`cache`))
                     .map(x => `Content/${x}`),
-            ].map(x => `${unpackPath}FSD/${x}`);
+            ];
+        }
+
+        // update toucan
+        if (updateToucan) {
+            const toucanPath = `${__dirname}/.temp/Toucan/`;
+            var toucan = await downloadRepo(toucanPath, `Touci/Toucan-DRG-Framework`, mLog);
+            if (toucan != true) return r(consolelog(`Failed to download toucan framework`));
+
+            updates[toucanPath] = [ // files we want from the template
+                `Content/Toucan`
+            ];
         }
         // :)
         await backup(true);
         // update folders
         var done = 0;
-        var updateList = [].concat(templateFiles, unpackList);
+        var updateList = [];
+        Object.keys(updates).forEach(key => {
+            updates[key].forEach(x => {
+                updateList.push([`${key}${x}`, `${ProjectPath}${x}`]);
+            });
+        });
         for (var i = 0; i < updateList.length; i++) {
+            var source = updateList[i][0];
+            var dest = updateList[i][1];
             try {
-                var x = updateList[i];
-                var dest = `${ProjectPath}${x.replace(templatePath, ``).replace(`${unpackPath}FSD/`, ``)}`;
                 fs.rmSync(dest, { recursive: true, force: true });
-                if (!fs.existsSync(x))
-                    consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(x))}"\nMissing: ${x}`);
+                if (!fs.existsSync(source))
+                    consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(source))}"\nMissing: ${source}`);
                 else {
-                    var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(x))}`);
-                    fs.moveSync(x, dest, { overwrite: true });
-                    consolelog(`Updated ${chalk.cyan(PATH.basename(x))}`, undefined, undefined, undefined, logI);
+                    var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(source))}`);
+                    //fs.moveSync(source, dest, { overwrite: true });
+                    consolelog(`Updated ${chalk.cyan(PATH.basename(source))}`, undefined, undefined, undefined, logI);
                     done++;
                 }
             } catch (e) {
-                consolelog(`ERROR ${chalk.red(x)}`, undefined, undefined, undefined, logI);
+                consolelog(`ERROR ${chalk.red(e)}\n${source}`, undefined, undefined, undefined, logI);
                 consolelog(e);
             }
         }
@@ -1716,14 +1742,19 @@ if (module.parent) return; // required as a module
                                     run: () => updateProject(),
                                 },
                                 {
+                                    name: `project (toucan)`,
+                                    color: `#ff00ff`,
+                                    run: () => updateProject(false, false, true),
+                                },
+                                {
                                     name: `project (template)`,
                                     color: `#ff00ff`,
-                                    run: () => updateProject(true, false),
+                                    run: () => updateProject(true, false, false),
                                 },
                                 {
                                     name: `project (unpack)`,
                                     color: `#ff00ff`,
-                                    run: () => updateProject(false, true),
+                                    run: () => updateProject(false, true, false),
                                 },
                                 {
                                     name: `generate template`,
@@ -1788,8 +1819,13 @@ if (module.parent) return; // required as a module
                         color: `#ffffff`,
                         run: (self) => {
                             function setPreset(key) {
+                                updateConfig(); // clean preset
                                 var preset = config.presets[key];
-                                if (!preset) return updateConfig(true); // reset
+                                if (selectedPresetKey == key) {
+                                    selectedPresetKey = ``;
+                                    consolelog(`Preset cleared.`);
+                                    return;
+                                }
                                 selectedPresetKey = key;
                                 applyPreset();
                                 function applyPreset(set = preset, path = []) {
@@ -1811,7 +1847,6 @@ if (module.parent) return; // required as a module
 
                                         var val = set[key];
                                         if (typeof val != typeof getV()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof getV()}"`);
-
                                         if (typeof val == `object`) return applyPreset(val, path.concat([key]));
                                         consolelog(`${key}: ${getV()} => ${val}`);
                                         setV(val);
@@ -1830,13 +1865,9 @@ if (module.parent) return; // required as a module
                                 },
                             ];
                             Object.keys(config.presets).forEach(key => {
-                                var val = config.presets[key];
-                                var name = `${key}`;
-                                if (selectedPresetKey == key)
-                                    name = `> ${name} <`
                                 presetMenu.push(
                                     {
-                                        name: name,
+                                        name: () => selectedPresetKey == key ? `> ${key} <` : key,
                                         run: () => {
                                             setPreset(key);
                                         },
