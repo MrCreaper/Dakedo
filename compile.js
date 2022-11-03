@@ -324,11 +324,19 @@ var config = {
         UnPacking: "", // auto generated
         CompileAll: "", // auto generated
     },
-    logs: "{dir}/logs.txt", // empty for no logs
-    externalLog: [], // show new logs from another file
+    logging: {
+        file: "./logs.txt", // empty for no logs
+        external: [], // show new logs from another file
+        cleaning: {
+            misc: true, // cleans up paths, and a few more
+            prefixes: true, // Removes Log{something}:
+            removeWarnings: true, // Remove lines containing "Warning: "
+            removeOther: false, // Remove everything that isnt super important (use with caution)
+        },
+        logConfig: false, // only on cmd version
+    },
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
-    logConfig: false, // only on cmd version
     ui: {
         enabled: true,  // use the ui version by default
         cleanBox: true, // clean logs around the options
@@ -344,7 +352,7 @@ var config = {
         selectArrows: true,
     },
     backup: {
-        folder: "{dir}/backups", // leave empty
+        folder: "./backups", // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
@@ -354,7 +362,7 @@ var config = {
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["{dir}/"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: ["./"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
@@ -466,7 +474,7 @@ const platformPaths = JSON.parse(JSON.stringify(templatePlatformPaths)); // new 
 
 const configPath = `${__dirname}/config.json`;
 
-function writeConfig(c = config) {
+function writeConfig(c = unVaredConfig) {
     fs.writeFileSync(configPath, JSON.stringify(c, null, 4));
 }
 
@@ -493,10 +501,14 @@ if (!paths) paths = platformPaths.givenUpos;
 const runningRoot = process.getuid && process.getuid() == 0; // dosent exist on win?
 
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
-if (!runningRoot)
+//if (!runningRoot) // I dont remember why this is here
+updateConfig();
+fs.watchFile(configPath, async (curr, prev) => {
+    if (curr.size == prev.size) return;
     updateConfig();
+    consolelog(chalk.gray(`Updated config`));
+});
 async function updateConfig(readFromFile = true, updateFile = true) {
-    console.log(`hi`);
     if (!fs.existsSync(configPath)) {
         console.log(`Wrote config.`);
         writeConfig();
@@ -584,8 +596,8 @@ async function updateConfig(readFromFile = true, updateFile = true) {
     if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
     if (!fs.existsSync(config.drg)) return consolelog(`Couldnt find drg\nPath: ${config.drg}`);
 
-    if (config.externalLog)
-        config.externalLog.forEach(ext => {
+    if (config.logging.external)
+        config.logging.external.forEach(ext => {
             if (!fs.existsSync(ext))
                 consolelog(`Invalid externalLog ${ext}`);
             else {
@@ -596,7 +608,7 @@ async function updateConfig(readFromFile = true, updateFile = true) {
                     externalLogsStart += read.length;
                     //consolelog(chalk.cyan(read.slice(0, 3).includes(`\n`) ? read.replace(`\n`, ``) : read), undefined, false); // remove starting new line and header
                     read.split(`\n`).forEach(x => consolelog(chalk.cyan(x)));
-                    /*var log = await readAt(config.externalLog, externalLogsStart); // I just had to worry about non-existent 50gb log files of all things :\
+                    /*var log = await readAt(config.logging.external, externalLogsStart); // I just had to worry about non-existent 50gb log files of all things :\
                     consolelog(chalk.cyan(log.startsWith(`\n`) ? log.replace(`\n`, ``) : log));
                     if (log.length)`
                         externalLogsStart += log.length;
@@ -605,11 +617,14 @@ async function updateConfig(readFromFile = true, updateFile = true) {
                 });
             }
         });
+
+    if (readFromFile && updateFile)
+        setPreset();
 }
 
 function logFile(log) {
-    if (config && config.logs)
-        fs.appendFileSync(config.logs, removeColor(log))
+    if (config && config.logging.file)
+        fs.appendFileSync(config.logging.file, removeColor(log))
 }
 
 // exports
@@ -657,13 +672,13 @@ module.exports.updateCacheState = updateCache = async (
 ) => {
     return new Promise(async (r, re) => {
         const statePath = `${config.modio.cache}metadata/state.json`
-        if (!fs.existsSync(statePath)) return re(consolelog(`Failed to find modio cache (state.json)\n${statePath}`));
-        if (!fs.existsSync(pakPath)) return re(consolelog(`Failed to find cache's new pak.\n${pakPath}`));
+        if (!fs.existsSync(statePath)) return r(consolelog(`Failed to find modio cache (state.json)\n${statePath}`));
+        if (!fs.existsSync(pakPath)) return r(consolelog(`Failed to find cache's new pak.\n${pakPath}`));
         var state = fs.readFileSync(statePath);
-        if (!isJsonString(state)) return re(consolelog(`MODIO CACHE/STATE IS CORRUPTED. PANIC!!`));
+        if (!isJsonString(state)) return r(consolelog(`MODIO CACHE/STATE IS CORRUPTED. PANIC!!`));
         state = JSON.parse(state);
         var i = state.Mods.findIndex(x => x.ID == modid);
-        if (i == -1) return re(consolelog(`Not subscribed to mod? (modio cache) id:${modid}`));
+        if (i == -1) return r(consolelog(`Not subscribed to mod? (modio cache) id:${modid}`));
         state.Mods[i].Profile.modfile = modFile;
         fs.writeJSONSync(statePath, state);
         fs.cpSync(pakPath, `${config.modio.cache}mods/${modid}/${modname}.pak`); // copy over old pak
@@ -680,7 +695,6 @@ module.exports.uploadMod = uploadMod = async (
     meta = ``,
 ) => {
     return new Promise(async (r, re) => {
-        if (typeof zip == `object`) return consolelog(arguments);
         if (!fs.existsSync(zip)) return r(consolelog(`File dosent exist.\n${zip}`));
         if (fs.statSync(zip).size > 5368709120) return r(consolelog(`Zip bigger then 5gb`));
         if (String(version) == `[object Promise]`) version = await version;
@@ -713,19 +727,19 @@ module.exports.uploadMod = uploadMod = async (
                 var buffer = Buffer.concat(data);
                 var resp = JSON.parse(buffer.toString());
                 if (res.statusCode == 201) {
-                    r(resp);
                     if (config.modio.updateCache)
                         updateCache(resp);
-                } else {
-                    if (resp.error.code == 422) {
-                        consolelog(`Stupid error. Retrying.. >:(`);
-                        r(await uploadMod.call(null, ...arguments));
-                    }
-                    if (resp.error)
-                        consolelog(resp.error);
-                    else consolelog(resp);
-                    r(false);
+                    r(resp);
+                    return;
                 }
+                /*if (resp.error.code == 422) {
+                    consolelog(`Stupid error. Retrying.. >:(`);
+                    return r(await uploadMod(zip, active, version, changelog, meta)); // I dont know how to use call w/arguments :(
+                }*/
+                if (resp.error)
+                    consolelog(resp.error);
+                else consolelog(resp);
+                r(false);
             });
         });
 
@@ -904,7 +918,7 @@ module.exports.template = template = async function () {
                 var keys = editMainLua();
                 // https://www.youtube.com/watch?v=LpSdNwv_yvQ
                 // https://www.reddit.com/r/linux_gaming/comments/y08u34/how_do_i_use_dll_injection_in_proton/
-                consolelog(`Next we need to inject a dll,\nSteam => DRG => Properties => Set Launch Options:\n\nWINEDLLOVERRIDES="./FSD/Binaries/Win64/ue4ss.dll=n,b" %command%\n\np.s copy from ${config.logs} (so no dumb mistakes)`); //for proton:\nWINEDLLOVERRIDES="${dir}standard1_3.dll=n,b" /path/to/proton/bin/wine executable
+                consolelog(`Next we need to inject a dll,\nSteam => DRG => Properties => Set Launch Options:\n\nWINEDLLOVERRIDES="./FSD/Binaries/Win64/ue4ss.dll=n,b" %command%\n\np.s copy from ${config.logging.file} (so no dumb mistakes)`); //for proton:\nWINEDLLOVERRIDES="${dir}standard1_3.dll=n,b" /path/to/proton/bin/wine executable
                 await waitForDrg();
                 consolelog(chalk.redBright(`You should see a console pop up when you launched drg, if not, we are screwed.`));
                 consolelog(`When you have loaded in and disabled your mods press ${keys.join(` & `)}`);
@@ -987,7 +1001,7 @@ module.exports.unpack = unpack = function (path, outpath) {
         logFile(`${path}\n${outpath}\n${cmd}\n\n`)
         child.exec(cmd)
             .on(`exit`, async () => {
-                var d = fs.readFileSync(config.logs);
+                var d = fs.readFileSync(config.logging.file);
                 if (d.includes(`LogPakFile: Error: Failed to load `)) {
                     consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
                     r(false);
@@ -1018,7 +1032,7 @@ module.exports.compileall = compileall = function () {
         logFile(`\n${cmd}\n\n`)
         child.exec(cmd)
             .on(`exit`, async () => {
-                var d = fs.readFileSync(config.logs);
+                var d = fs.readFileSync(config.logging.file);
                 var split = d.toString().split(`\n`);
                 split.forEach(x => {
                     if (x.includes(`LogBlueprint: Error:`))
@@ -1033,7 +1047,7 @@ module.exports.compileall = compileall = function () {
     })
 }
 
-module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1) {
+module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1, meta = {}) {
     return new Promise(async r => {
         try {
             if (full)
@@ -1086,6 +1100,8 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                 date: new Date(),
                 size: await dirSize(buf),
                 full: full,
+                modname: config.ModName,
+                meta: meta,
             });
 
             // remove blacklisted items
@@ -1118,6 +1134,8 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     if (aid < bid) return -1;
                     if (aid > bid) return 1;
                     return 0;
+                }).filter(x => {
+
                 }); // oldest => newest
                 backups.forEach((x, i) => {
                     //if(i == 0) return; // keep oldest as a keepsake
@@ -1156,10 +1174,12 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
 
     // find line
     var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
+    var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
+    var headerIndex = read.findIndex(x => x.includes(header));
+    dirsIndex = headerIndex;
     if (dirsIndex == -1) {
         // if cant find the variables, find the header
-        var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
-        dirsIndex = read.findIndex(x => x.includes(header));
+        dirsIndex = headerIndex;
         if (dirsIndex == -1) // fuck it, add the header
             dirsIndex = read.push(header);
     }
@@ -1184,7 +1204,7 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
     // find and add new never cooks
     fs.readdirSync(`${ProjectPath}Content/`).forEach(x => {
         if (!whitelist.includes(x))
-            read.splice(dirsIndex, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
+            read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
     });
     fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
 }
@@ -1247,7 +1267,7 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/P
     logFile(`\n${cmd} ${args.join(` `)}\n`);
     child.spawn(cmd, args)
         .on('exit', async () => {
-            var d = fs.readFileSync(config.logs, `utf8`).split(`\n`);
+            var d = fs.readFileSync(config.logging.file, `utf8`).split(`\n`);
             var completed = d.find(x => x.includes(`Exported`));
             if (completed) {
                 consolelog(completed);
@@ -1452,17 +1472,17 @@ async function startDrg() {
     return new Promise(async r => {
         await killDrg();
         var log = consolelog(`Launching DRG...`);
-        var exited = false;
+        var started = false;
         setTimeout(() => {
-            if (exited) return;
+            if (started) return;
             consolelog(`Timedout launching DRG`, undefined, undefined, undefined, log);
-            r();
+            r(false);
         }, 10000);
         child.exec(`steam steam://rungameid/548430`)
             .on(`exit`, () => {
-                exited = true;
+                started = true;
                 consolelog(`Launched DRG`, undefined, undefined, undefined, log); // most likely
-                r();
+                r(true);
             })
             .on(`message`, (d) => logFile(String(d)))
             .stdout.on('data', (d) => logFile(String(d)))
@@ -1511,6 +1531,46 @@ async function killDrg() {
     })
 }
 
+function setPreset(key = selectedPresetKey) {
+    updateConfig(true, false); // clean preset
+    if (!key) return;
+    var preset = config.presets[key];
+    if (selectedPresetKey == key && selectedPresetKey) {
+        selectedPresetKey = ``;
+        consolelog(`Preset cleared.`);
+        return;
+    }
+    selectedPresetKey = key;
+    if (!preset) return consolelog(`Invalid preset: ${key}`);
+    applyPreset();
+    function applyPreset(set = preset, path = []) {
+        Object.keys(set).forEach(key => {
+            function setV(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                stack = stack.concat([key]);
+                while (stack.length > 1) {
+                    object = object[stack.shift()];
+                }
+                return object[stack.shift()] = newValue;
+            }
+            function getV(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                stack = stack.concat([key]);
+                while (stack.length > 1) {
+                    object = object[stack.shift()];
+                }
+                return object[stack.shift()];
+            }
+
+            var val = set[key];
+            if (typeof val != typeof getV()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof getV()}"`);
+            if (typeof val == `object`) return applyPreset(val, path.concat([key]));
+            consolelog(`${key}: ${getV()} => ${val}`);
+            setV(val);
+        });
+    }
+    config = unVaredConfig;
+    updateConfig(false, false);
+}
+
 if (!fs.existsSync(`${ProjectPath}Config/DefaultGame.ini`)) fs.writeFileSync(`${ProjectPath}Config/DefaultGame.ini`, ``);;
 
 var children = [];
@@ -1540,7 +1600,7 @@ process.on('SIGUSR1', exitHandler);
 process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
-fs.writeFileSync(config.logs, ``);
+fs.writeFileSync(config.logging.file, ``);
 
 if (module.parent) return; // required as a module
 
@@ -1769,7 +1829,7 @@ if (module.parent) return; // required as a module
                         name: `export`,
                         color: `#00ff00`,
                         run: (self) => {
-                            selectedMenu = [
+                            var exportMenu = [
                                 {
                                     name: `back`,
                                     color: `#00FFFF`,
@@ -1797,10 +1857,36 @@ if (module.parent) return; // required as a module
                                             consolelog(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`);
                                             await unpack(path);
                                             consolelog(`Unpacked!`);
+                                            r();
                                         })
                                     },
                                 },
                             ];
+                            function searchFolder(folder, search) {
+                                var results = [];
+                                fs.readdirSync(folder).forEach(x => {
+                                    if (fs.statSync(`${folder}${x}`).isDirectory())
+                                        results = results.concat(searchFolder(`${folder}${x}/`, search));
+                                    else if (x.includes(search))
+                                        results.push(`${folder}${x}`);
+                                });
+                                return results;
+                            }
+                            searchFolder(`${config.drg}/FSD/Mods/`, `.pak`).forEach(x => {
+                                exportMenu.splice(1, 0, {
+                                    name: PATH.basename(x.replace(`.pak`, ``)),
+                                    color: `#ffffff`, // generated static color from name?
+                                    run: async (self) => {
+                                        return new Promise(async r => {
+                                            consolelog(`Unpacking ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`);
+                                            await unpack(x);
+                                            consolelog(`Unpacked!`);
+                                            r();
+                                        })
+                                    },
+                                });
+                            });
+                            selectedMenu = exportMenu;
                             selected = 0;
                         },
                     },
@@ -1818,43 +1904,6 @@ if (module.parent) return; // required as a module
                         name: `presets`,
                         color: `#ffffff`,
                         run: (self) => {
-                            function setPreset(key) {
-                                updateConfig(); // clean preset
-                                var preset = config.presets[key];
-                                if (selectedPresetKey == key) {
-                                    selectedPresetKey = ``;
-                                    consolelog(`Preset cleared.`);
-                                    return;
-                                }
-                                selectedPresetKey = key;
-                                applyPreset();
-                                function applyPreset(set = preset, path = []) {
-                                    Object.keys(set).forEach(key => {
-                                        function setV(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
-                                            stack = stack.concat([key]);
-                                            while (stack.length > 1) {
-                                                object = object[stack.shift()];
-                                            }
-                                            return object[stack.shift()] = newValue;
-                                        }
-                                        function getV(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
-                                            stack = stack.concat([key]);
-                                            while (stack.length > 1) {
-                                                object = object[stack.shift()];
-                                            }
-                                            return object[stack.shift()];
-                                        }
-
-                                        var val = set[key];
-                                        if (typeof val != typeof getV()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof getV()}"`);
-                                        if (typeof val == `object`) return applyPreset(val, path.concat([key]));
-                                        consolelog(`${key}: ${getV()} => ${val}`);
-                                        setV(val);
-                                    });
-                                }
-                                config = unVaredConfig;
-                                updateConfig(false, false);
-                            }
                             var presetMenu = [
                                 {
                                     name: `back`,
@@ -2426,9 +2475,9 @@ if (module.parent) return; // required as a module
         config.startDRG = !config.startDRG;
 
     var logsDisabled = false;
-    if (!config.logs) {
+    if (!config.logging.file) {
         fs.mkdirSync(`${__dirname}/.temp/`);
-        config.logs = `${__dirname}/.temp/backuplogs.txt`;
+        config.logging.file = `${__dirname}/.temp/backuplogs.txt`;
         logsDisabled = true;
     }
 
@@ -2441,7 +2490,7 @@ if (module.parent) return; // required as a module
         else
             return unpack(unpackFile);
 
-    if (config.logConfig)
+    if (config.logging.logConfig)
         logConfig(config);
     function logConfig(config = config, depth = 0) {
         var maxConfigKeyLenght = 0;
@@ -2492,7 +2541,7 @@ if (module.parent) return; // required as a module
         });
     }
 
-    if (config.logConfig) consolelog();
+    if (config.logging.logConfig) consolelog();
     logFile(`${JSON.stringify(config, null, 4)}\n`);
 
     if (process.argv.includes(`-bu`)) return backup();
@@ -2546,7 +2595,7 @@ if (module.parent) return; // required as a module
 
             var ch = child.exec(config.cmds.Packing)
                 .on('exit', async () => {
-                    var d = fs.readFileSync(config.logs);
+                    var d = fs.readFileSync(config.logging.file);
                     if (d.includes(`LogPakFile: Error: Failed to load `)) {
                         consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
                         return r();
@@ -2649,23 +2698,79 @@ if (module.parent) return; // required as a module
     var startTime = new Date();
     function cook(force = false) {
         return new Promise(r => {
+            fs.writeFileSync(config.logging.file, ``); // clear logs
             startTime = new Date();
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
             var log = consolelog(`cooking...`);
-            //refreshDirsToNeverCook();
+            refreshDirsToNeverCook();
             logFile(`\n${config.cmds.Cooking}\n\n`);
             killDrg();
             var ch = child.exec(config.cmds.Cooking);
             ch.on('exit', async () => {
-                var d = fs.readFileSync(config.logs, `utf8`);
-                d = d
-                    .replace(/\\/g, `/`)
-                    .replace(/\[AssetLog\] /g, ``)
-                    .replace(/\.\.\//g, ``)
-                    .replace(/ The asset will be loaded but may be incompatible./g, ``)
-                    .replace(new RegExp(`${`Z:${ProjectPath}`}`, `g`), ``)
-                    .replace(new RegExp(`LogInit: |Display: |LogPython: |LogAssetRegistry: |LogClass: |LogCookCommandlet: |LogCook: |LogShaderLibrary: |LogAutomationTest: |LogLinker: |LogUObjectGlobals: |LogTargetPlatformManager: |LogShaders: |LogVSAccessor: |LogContentStreaming: |LogShaderCompilers: `, `g`), ``)
-                fs.writeFileSync(config.logs, d);
+                function cleanLogs() {
+                    var d = fs.readFileSync(config.logging.file, `utf8`);
+                    var c = config.logging.cleaning;
+                    if (c.misc) {
+                        d = d.replace(/\\/g, `/`)
+                            .replace(/\[AssetLog\] /g, ``)
+                            .replace(/\.\.\//g, ``)
+                            .replace(/ The asset will be loaded but may be incompatible./g, ``)
+                            .replace(new RegExp(`${`Z:${ProjectPath}`}`, `g`), ``)
+                            .replace(/::Serialize| Loading: Property/g, ``)
+                            .replace(/Display: /g, ``)
+                    }
+                    if (c.removeWarnings)
+                        d = d
+                            .split(`\n`)
+                            .filter(x => {
+                                return !x.includes(`Warning: `); // keep?
+                            })
+                            .join(`\n`);
+                    const miscPrefixes = [
+                        `LogAssetRegistry: `,
+                        `LogCookCommandlet: `,
+                        `LogCook: `,
+                        `LogShaderLibrary: `,
+                        `LogAutomationTest: `,
+                        `LogLinker: `,
+                        `LogUObjectGlobals: `,
+                        `LogTargetPlatformManager: `,
+                        `LogShaders: `,
+                        `LogVSAccessor: `,
+                        `LogContentStreaming: `,
+                        `LogShaderCompilers: `,
+                        `LogAssetRegistryGenerator: `,
+                        `LogBlueprintCodeGen: `,
+                        `LogProperty: `,
+                        `LogAudioCaptureCore: `,
+                        `LogSteamShared: `,
+                        `LogDerivedDataCache: `,
+                        `LogHttp: `,
+                        `LogClass: `,
+                        `LogBlueprint: `,
+                        `LogWindows: `,
+                    ];
+                    const allPrefixes = [
+                        `LogInit: `,
+                        `LogPython: `,
+                    ].concat(miscPrefixes);
+                    if (c.removeOther)
+                        d = d
+                            .split(`\n`)
+                            .filter(x => {
+                                return x == x // keep?
+                                    // remove if includes thees
+                                    .replace(new RegExp(`${miscPrefixes.join(`|`)}`, `g`), ``)
+                                    || x.includes(`Error: `);
+                            })
+                            .join(`\n`);
+                    if (c.prefixes)
+                        d = d
+                            .replace(new RegExp(`${allPrefixes.join(`|`)}`, `g`), ``)
+                    fs.writeFileSync(config.logging.file, d);
+                    return d;
+                }
+                var d = cleanLogs();
                 if (d.includes(`Success - 0 error(s),` || force)) {
                     consolelog(chalk.greenBright(`Cooked!${!d.includes(`Success - 0 error(s),`) && force ? ` ;)` : ``}`), undefined, undefined, undefined, log);
                     await pack();
@@ -2673,11 +2778,11 @@ if (module.parent) return; // required as a module
                 } else if (d.includes(`Failure - `)) {
                     var errs = 0;
                     var errorsLogs = ``;
-                    var restart = false;
+                    var restart = false; // reason
                     try {
                         d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
                             if (!x.includes(` Error: `)) return;
-                            if (x.includes(`Mismatch size for type `)) restart = true;
+                            if (x.includes(`Mismatch size for type `)) restart = `Mismatch size, dissapears with recook`;
                             errs++;
                             var log = x
                                 .replace(new RegExp(`Z:`, 'g'), ``)
@@ -2687,7 +2792,7 @@ if (module.parent) return; // required as a module
                                 .replace(/StructProperty /g, ``)
                                 .replace(/\/Game/g, ``) // file path start
                                 .replace(/_C:/g, ` > `) // after file
-                                .replace(/:CallFunc_/g, ` > (function) `)
+                                .replace(/:CallFunc_/g, ` > ${chalk.blue(`(function)`)} `)
                                 .replace(/ExecuteUbergraph_/g, ` > (graph) `)
                                 .replace(/\[AssetLog\]/g, ``)
                                 .replace(/\\/g, `/`)
@@ -2714,14 +2819,12 @@ if (module.parent) return; // required as a module
                     consolelog(`Errors ${chalk.redBright(errs)}:\n\n${errorsLogs}`, undefined, undefined, undefined, log);
                     if (logsDisabled) {
                         consolelog(`${chalk.red(`Failed`)}y. Check the logs and-... oh wait, you disabled logs. Lucky for you, I make backups.`);
-                        fs.renameSync(config.logs, `${__dirname}/logs.txt`);
+                        fs.renameSync(config.logging.file, `${__dirname}/logs.txt`);
                         return r();
                     }
-                    consolelog(`${errs != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. Check the logs${errs != 0 ? ` (or check the above)` : ``} and fix your damn "code"`);
-                    if (restart)
-                        return r(await cook());
-                    else
-                        return r();
+                    consolelog(`${errs != 0 && errorsLogs.length != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. ${restart == false ? `Check the logs${errorsLogs.length != 0 ? ` (or check the above)` : ``} and fix your damn "code"` : `Recooking couse ${restart}`}`);
+                    if (restart) return r(await cook());
+                    return r();
                 } else {
                     consolelog(`Something went very wrong cooking..?`, undefined, undefined, undefined, log);
                     return r();

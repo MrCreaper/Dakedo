@@ -11,7 +11,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 
 ## Config
 
-```json
+```js
 {
     ProjectName: "FSD",
     ModName: ``, // auto found
@@ -25,11 +25,19 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
         UnPacking: "", // auto generated
         CompileAll: "", // auto generated
     },
-    logs: "{dir}/logs.txt", // empty for no logs
-    externalLog: [], // show new logs from another file
+    logging: {
+        file: "./logs.txt", // empty for no logs
+        external: [], // show new logs from another file
+        cleaning: {
+            misc: true, // cleans up paths, and a few more
+            prefixes: true, // Removes Log{something}:
+            removeWarnings: true, // Remove lines containing "Warning: "
+            removeOther: false, // Remove everything that isnt super important (use with caution)
+        },
+        logConfig: false, // only on cmd version
+    },
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
-    logConfig: false, // only on cmd version
     ui: {
         enabled: true,  // use the ui version by default
         cleanBox: true, // clean logs around the options
@@ -45,7 +53,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
         selectArrows: true,
     },
     backup: {
-        folder: "{dir}/backups", // leave empty
+        folder: "./backups", // leave empty
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
@@ -55,7 +63,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["{dir}/"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: ["./"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
@@ -102,7 +110,7 @@ just start it with "code{newline}".
 
 Example:
 
-```json
+```js
 {
     name: "hack the mainframe",
     color: "00ff00",
