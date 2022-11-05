@@ -332,6 +332,8 @@ var config = {
             prefixes: true, // Removes Log{something}:
             removeWarnings: true, // Remove lines containing "Warning: "
             removeOther: false, // Remove everything that isnt super important (use with caution)
+            clearOnCook: true, // clear logs before cooking
+            clearOnNewSession: true, // clear logs when started
         },
         logConfig: false, // only on cmd version
     },
@@ -1600,7 +1602,8 @@ process.on('SIGUSR1', exitHandler);
 process.on('SIGUSR2', exitHandler);
 //catches uncaught exceptions
 process.on('uncaughtException', exitHandler);
-fs.writeFileSync(config.logging.file, ``);
+if (config.logging.cleaning.clearOnNewSession)
+    fs.writeFileSync(config.logging.file, ``);
 
 if (module.parent) return; // required as a module
 
@@ -2698,7 +2701,8 @@ if (module.parent) return; // required as a module
     var startTime = new Date();
     function cook(force = false) {
         return new Promise(r => {
-            fs.writeFileSync(config.logging.file, ``); // clear logs
+            if (config.logging.cleaning.clearOnCook)
+                fs.writeFileSync(config.logging.file, ``); // clear logs
             startTime = new Date();
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
             var log = consolelog(`cooking...`);
