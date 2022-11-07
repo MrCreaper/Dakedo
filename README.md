@@ -12,7 +12,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 ## Config
 
 ```js
-{
+var config = {
     ProjectName: "FSD",
     ModName: ``, // auto found
     ProjectFile: "/../FSD.uproject", // also general folder

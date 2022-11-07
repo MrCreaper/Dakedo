@@ -990,6 +990,7 @@ module.exports.unpack = unpack = function (path, outpath) {
     if (!outpath) outpath = `${__dirname}/${PATH.basename(path).split(`.`)[0]}`;
     return new Promise(r => {
         const normalOutPath = outpath;
+        fs.rmSync(outpath, { recursive: true, force: true });
         fs.mkdirsSync(outpath);
         if (wine) {
             if (!path.startsWith(`Z:`))
@@ -1478,7 +1479,7 @@ async function startDrg() {
         setTimeout(() => {
             if (started) return;
             consolelog(`Timedout launching DRG`, undefined, undefined, undefined, log);
-            r(false);
+            r(true);
         }, 10000);
         child.exec(`steam steam://rungameid/548430`)
             .on(`exit`, () => {
@@ -1857,9 +1858,9 @@ if (module.parent) return; // required as a module
                                     run: async (self) => {
                                         return new Promise(async r => {
                                             var path = `${config.drg}/FSD/Content/Paks/FSD-WindowsNoEditor.pak`;
-                                            consolelog(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`);
+                                            var log = consolelog(`Unpacking ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`);
                                             await unpack(path);
-                                            consolelog(`Unpacked!`);
+                                            consolelog(`Unpacked ${chalk.cyan(PATH.basename(path).replace(`.pak`, ``))}`, undefined, undefined, undefined, log);
                                             r();
                                         })
                                     },
@@ -1875,20 +1876,21 @@ if (module.parent) return; // required as a module
                                 });
                                 return results;
                             }
-                            searchFolder(`${config.drg}/FSD/Mods/`, `.pak`).forEach(x => {
-                                exportMenu.splice(1, 0, {
-                                    name: PATH.basename(x.replace(`.pak`, ``)),
-                                    color: `#ffffff`, // generated static color from name?
-                                    run: async (self) => {
-                                        return new Promise(async r => {
-                                            consolelog(`Unpacking ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`);
-                                            await unpack(x);
-                                            consolelog(`Unpacked!`);
-                                            r();
-                                        })
-                                    },
+                            searchFolder(`${config.drg}/FSD/Mods/`, `.pak`)
+                                .forEach(x => {
+                                    exportMenu.splice(1, 0, {
+                                        name: PATH.basename(x.replace(`.pak`, ``)),
+                                        color: `#ffffff`, // generated static color from name?
+                                        run: async (self) => {
+                                            return new Promise(async r => {
+                                                var log = consolelog(`Unpacking ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`);
+                                                await unpack(x);
+                                                consolelog(`Unpacked ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`, undefined, undefined, undefined, log);
+                                                r();
+                                            })
+                                        },
+                                    });
                                 });
-                            });
                             selectedMenu = exportMenu;
                             selected = 0;
                         },
@@ -2325,6 +2327,7 @@ if (module.parent) return; // required as a module
                 logPush -= fittedLogs.length - lastFittedLogsLength;
             if (-logPush > fittedLogs.length) // scroll backup (+) if cleared
                 logPush = fittedLogs.length;
+            if (logPush > 0) logPush = -logPush;
             lastFittedLogsLength = fittedLogs.length;
             draw();
         });
@@ -2488,10 +2491,14 @@ if (module.parent) return; // required as a module
     var unpackFile = process.argv.slice(2).join(` `);
 
     if (unpackFile.endsWith(`.pak`))
-        if (!fs.existsSync(unpackFile))
-            return consolelog(`Invalid pakfile path\n${unpackFile}`);
-        else
-            return unpack(unpackFile);
+        if (!fs.existsSync(unpackFile)) {
+            consolelog(`Invalid pakfile path\n${unpackFile}`);
+            return exitHandler();
+        } else {
+            await unpack(unpackFile);
+            consolelog(`Unpacked ${chalk.cyan(PATH.basename(unpackFile))}`);
+            return exitHandler();
+        }
 
     if (config.logging.logConfig)
         logConfig(config);
@@ -2785,7 +2792,7 @@ if (module.parent) return; // required as a module
                     var restart = false; // reason
                     try {
                         d.split(`Warning/Error Summary (Unique only)`)[1].split(`\n`).forEach(x => {
-                            if (!x.includes(` Error: `)) return;
+                            if (!x.includes(`Error: `)) return;
                             if (x.includes(`Mismatch size for type `)) restart = `Mismatch size, dissapears with recook`;
                             errs++;
                             var log = x
@@ -2827,7 +2834,7 @@ if (module.parent) return; // required as a module
                         return r();
                     }
                     consolelog(`${errs != 0 && errorsLogs.length != 0 ? `\n` : ``}${chalk.redBright(`Failed`)}. ${restart == false ? `Check the logs${errorsLogs.length != 0 ? ` (or check the above)` : ``} and fix your damn "code"` : `Recooking couse ${restart}`}`);
-                    if (restart) return r(await cook());
+                    if (restart && !force) return r(await cook());
                     return r();
                 } else {
                     consolelog(`Something went very wrong cooking..?`, undefined, undefined, undefined, log);
