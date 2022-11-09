@@ -1971,8 +1971,8 @@ if (module.parent) return; // required as a module
                             searchFolder(`${config.drg}/FSD/Mods/`, `.pak`)
                                 .forEach(x => {
                                     exportMenu.splice(1, 0, {
-                                        name: PATH.basename(x.replace(`.pak`, ``)),
-                                        color: `#ffffff`, // generated static color from name?
+                                        name: staticCText(PATH.basename(x.replace(`.pak`, ``))),
+                                        color: `#ffffff`,
                                         run: async (self) => {
                                             return new Promise(async r => {
                                                 var log = consolelog(`Unpacking ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`);
