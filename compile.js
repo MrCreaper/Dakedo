@@ -1228,18 +1228,18 @@ module.exports.loadbackup = loadbackup = async function (id) {
         if (!fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`))
             consolelog(`Missing id.`)
         else {
-            consolelog(`Unloading backup...`);
+            var log = consolelog(`Unloading backup...`);
             if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`))
                 fs.rmSync(`${ProjectPath}Content/${config.ModName}`, { recursive: true, force: true });
             fs.renameSync(`${ProjectPath}Content/${config.ModName} Latest`, `${ProjectPath}Content/${config.ModName}`);
-            consolelog(`Unloaded backup.`);
+            consolelog(`Unloaded backup.`, undefined, undefined, undefined, log);
             return;
         }
     if (!isNaN(id) && !Number.isInteger(parseInt(id))) return consolelog(`Invalid id. ${id}`); // custom ids would be nice
     var backuppath = fs.readdirSync(config.backup.folder).find(x => x.startsWith(`${id} - `))
     if (!backuppath) return consolelog(`Invalid backup id!`);
     var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
-    consolelog(`Loading backup ${chalk.cyan(folder.split(` - `)[0])} from ${chalk.cyan(since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1])))} ago`);
+    var log = consolelog(`Loading backup...`);
 
     if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`) && fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`)) {
         consolelog(`Backup already loaded, removing.`);
@@ -1251,11 +1251,11 @@ module.exports.loadbackup = loadbackup = async function (id) {
     if (folder.endsWith(`.zip`))
         await zl.extract(backuppath, `${ProjectPath}Content/${config.ModName}`);
     else {
-        if (!fs.existsSync(`${config.backup.folder}/${backuppath}/${config.ModName}`)) return consolelog(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${config.backup.folder}/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`);
+        if (!fs.existsSync(`${config.backup.folder}/${backuppath}/${config.ModName}`)) return consolelog(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${config.backup.folder}/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`, undefined, undefined, undefined, log);
         fs.copySync(`${config.backup.folder}/${backuppath}/${config.ModName}`, `${ProjectPath}Content/${config.ModName}`);
     }
     refreshDirsToNeverCook();
-    consolelog(`Backup loaded!`);
+    consolelog(`Backup loaded! ${chalk.cyan(folder.split(` - `)[0])} from ${chalk.cyan(since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1])))} ago`, undefined, undefined, undefined, log);
 }
 
 module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/Paks/`, out = `./export/`, flatPath = ``) => {
@@ -1700,13 +1700,70 @@ if (module.parent) return; // required as a module
                         name: name,
                         color: `#FFFFFF`,
                         run: () => loadbackup(x.split(` - `)[0]),
-                        /*key: (k) => {
+                        key: (k) => {
                             switch (k) {
-                                case `d`:
-                                    // delete?
+                                case `y`: // delete, whY
+                                    //fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
+                                    //consolelog(`Deleted ${x}`);
+                                    break;
+                                case `i`: // info
+                                    var infoList = [
+                                        {
+                                            name: `back`,
+                                            color: `#00FFFF`,
+                                            run: () => {
+                                                selectedMenu = listBackupOptions;
+                                                selected = getOptionIndex(name);
+                                            },
+                                            key: (k) => {
+                                                if (k != `i`) return;
+                                                selectedMenu = listBackupOptions;
+                                                selected = getOptionIndex(name);
+                                            },
+                                        },
+                                    ];
+                                    addInfo();
+                                    function addInfo(Info = info) {
+                                        Object.keys(Info).forEach(key => {
+                                            var val = Info[key];
+                                            if (typeof val == `object`) {
+                                                if (Object.keys(val) == 0) return;
+                                                infoList.push(
+                                                    {
+                                                        name: `-- ${key} --`,
+                                                        color: `#ffffff`,
+                                                    }
+                                                );
+                                                addInfo(val);
+                                            } else {
+                                                switch (key) {
+                                                    case `size`:
+                                                        val = humanFileSize(val, true).toLowerCase().replace(` `, ``);
+                                                        break;
+                                                    case `date`:
+                                                        val = new Date(val).toISOString().replace(/T/, ' ').replace(/\..+/, '');
+                                                        infoList.push(
+                                                            {
+                                                                name: `since: ${since(new Date(new Date().toUTCString()) - new Date(val))}`,
+                                                                color: `#ffffff`,
+                                                            }
+                                                        );
+                                                        break;
+                                                }
+                                                infoList.push(
+                                                    {
+                                                        name: `${key}: ${val}`,
+                                                        color: `#ffffff`,
+                                                    }
+                                                );
+                                            }
+                                        });
+                                    }
+                                    selectedMenu = infoList;
+                                    selected = 0;
                                     break;
                             }
-                        },*/
+                        },
                     });
                 });
                 listBackupOptions.splice(1, 0, {
