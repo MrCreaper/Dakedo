@@ -33,8 +33,11 @@ var config = {
             prefixes: true, // Removes Log{something}:
             removeWarnings: true, // Remove lines containing "Warning: "
             removeOther: false, // Remove everything that isnt super important (use with caution)
+            clearOnCook: true, // clear logs before cooking
+            clearOnNewSession: true, // clear logs when started
         },
         logConfig: false, // only on cmd version
+        staticColor: true, // color mod names
     },
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
@@ -53,7 +56,7 @@ var config = {
         selectArrows: true,
     },
     backup: {
-        folder: "./backups", // leave empty
+        folder: "./backups", // leave empty for no backups
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
@@ -91,7 +94,7 @@ var config = {
         },
     },
     update: true, // automaticlly update
-}
+};
 ```
 
 ### Config path variables

@@ -163,8 +163,10 @@ function searchDir(p = ``, search = []) {
         fs.readdirSync(path).forEach(x => {
             var fp = `${path}/${x}`
             var s = fs.statSync(fp);
-            if (s.isDirectory()) queryDir(fp);
-            if (/*s.isFile() && */search.includes(x)) hits.push(fp);
+            if (/*s.isFile() && */search.includes(x))
+                hits.push(fp);
+            else
+                if (s.isDirectory()) queryDir(fp);
         });
     }
     return hits;
@@ -306,6 +308,11 @@ function removeColor(input) {
     return String(input).replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
 }
 
+function staticCText(str) { // static colored text
+    if (!config.logging.staticColor) return chalk.cyan(str);
+    return chalk.hex(`#${crypto.createHash('md5').update(str).digest('hex').slice(0, 5)}`)(str)
+}
+
 function getUsername() {
     return child.spawnSync(`users`).output[1].toString().replace(/\n/, ``);
 }
@@ -336,6 +343,7 @@ var config = {
             clearOnNewSession: true, // clear logs when started
         },
         logConfig: false, // only on cmd version
+        staticColor: true, // color mod names
     },
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
@@ -354,7 +362,7 @@ var config = {
         selectArrows: true,
     },
     backup: {
-        folder: "./backups", // leave empty
+        folder: "./backups", // leave empty for no backups
         onCompile: true,
         max: 5, // -1 for infinite
         pak: false,
@@ -1051,16 +1059,17 @@ module.exports.compileall = compileall = function () {
 }
 
 module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1, meta = {}) {
+    if (!config.backup.folder) return;
     return new Promise(async r => {
         try {
             if (full)
                 var log = consolelog(`Making FULL backup...`);
             else
                 var log = consolelog(`Making backup...`);
-            fs.mkdirsSync(`${__dirname}/backups`);
+            fs.mkdirsSync(config.backup.folder);
 
             var id = -1;
-            fs.readdirSync(`${__dirname}/backups`).forEach(x => {
+            fs.readdirSync(config.backup.folder).forEach(x => {
                 var xid = x.split(` - `)[0];
                 if (isNaN(xid) && xid != `0`) return consolelog(`invalid ${x}`);
                 xid = parseInt(xid);
@@ -1070,7 +1079,7 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
             id++;
 
             // actually start backuping
-            var buf = `${__dirname}/backups/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
+            var buf = `${config.backup.folder}/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
             fs.mkdirsSync(buf);
             // full backup
             if (full) {
@@ -1078,11 +1087,12 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                 var paths = fs.readdirSync(ProjectPath);
                 for (var i = 0; i < paths.length; i++) {
                     var p = paths[i];
-                    if (p != s) {
-                        var logI = consolelog(`Backuping ${chalk.cyan(p)}`);
-                        fs.copySync(`${ProjectPath}${p}`, `${buf}/${p}`);
-                        consolelog(`Backuped ${chalk.cyan(p)}`, undefined, undefined, undefined, logI);
-                    }
+                    if (![PATH.basename(__dirname), PATH.basename(config.backup.folder)].includes(p) && !config.backup.blacklist.includes(p))
+                        if (p != s) {
+                            var logI = consolelog(`Backuping ${chalk.cyan(p)}`);
+                            fs.copySync(`${ProjectPath}${p}`, `${buf}/${p}`);
+                            consolelog(`Backuped ${chalk.cyan(p)}`, undefined, undefined, undefined, logI);
+                        }
                 }
             }
             // full is just an addition, load it yourself.
@@ -1125,7 +1135,7 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
             }
 
             if (limit) {
-                var backups = fs.readdirSync(`${__dirname}/backups`).sort(function (a, b) {
+                var backups = fs.readdirSync(config.backup.folder).sort(function (a, b) {
                     var aid = a.split(` - `)[0];
                     if (isNaN(aid)) return;
                     aid = parseInt(aid);
@@ -1144,7 +1154,7 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     //if(i == 0) return; // keep oldest as a keepsake
                     if (backups.length - i - 1 > config.backup.max) {
                         //var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
-                        fs.rmSync(`${__dirname}/backups/${x}`, { recursive: true, force: true });
+                        fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
                         //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
                     }
                 });
@@ -1155,8 +1165,9 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
         } catch (error) {
             consolelog(`Backup error`, undefined, undefined, undefined, log);
             consolelog(error);
-            consolelog(`Retrying backup...`);
-            r(await module.exports.backup.call(null, ...arguments));
+            r(false);
+            //consolelog(`Retrying backup...`);
+            //r(await module.exports.backup.call(null, ...arguments));
         }
     })
 };
@@ -1225,7 +1236,7 @@ module.exports.loadbackup = loadbackup = async function (id) {
             return;
         }
     if (!isNaN(id) && !Number.isInteger(parseInt(id))) return consolelog(`Invalid id. ${id}`); // custom ids would be nice
-    var backuppath = fs.readdirSync(`${__dirname}/backups`).find(x => x.startsWith(`${id} - `))
+    var backuppath = fs.readdirSync(config.backup.folder).find(x => x.startsWith(`${id} - `))
     if (!backuppath) return consolelog(`Invalid backup id!`);
     var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
     consolelog(`Loading backup ${chalk.cyan(folder.split(` - `)[0])} from ${chalk.cyan(since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1])))} ago`);
@@ -1240,8 +1251,8 @@ module.exports.loadbackup = loadbackup = async function (id) {
     if (folder.endsWith(`.zip`))
         await zl.extract(backuppath, `${ProjectPath}Content/${config.ModName}`);
     else {
-        if (!fs.existsSync(`${__dirname}/backups/${backuppath}/${config.ModName}`)) return consolelog(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${__dirname}/backups/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`);
-        fs.copySync(`${__dirname}/backups/${backuppath}/${config.ModName}`, `${ProjectPath}Content/${config.ModName}`);
+        if (!fs.existsSync(`${config.backup.folder}/${backuppath}/${config.ModName}`)) return consolelog(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${config.backup.folder}/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`);
+        fs.copySync(`${config.backup.folder}/${backuppath}/${config.ModName}`, `${ProjectPath}Content/${config.ModName}`);
     }
     refreshDirsToNeverCook();
     consolelog(`Backup loaded!`);
@@ -1456,7 +1467,7 @@ async function updateProject(
                     consolelog(`Failed to find update for "${chalk.redBright(PATH.basename(source))}"\nMissing: ${source}`);
                 else {
                     var logI = consolelog(`Updating ${chalk.cyan(PATH.basename(source))}`);
-                    //fs.moveSync(source, dest, { overwrite: true });
+                    fs.moveSync(source, dest);
                     consolelog(`Updated ${chalk.cyan(PATH.basename(source))}`, undefined, undefined, undefined, logI);
                     done++;
                 }
@@ -1662,7 +1673,7 @@ if (module.parent) return; // required as a module
                         },
                     },
                 ];
-                var backuppath = fs.readdirSync(`${__dirname}/backups`);
+                var backuppath = fs.readdirSync(config.backup.folder);
                 if (!backuppath) return consolelog(`Invalid backup id!`);
                 backuppath.sort(function (a, b) {
                     var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
@@ -1671,17 +1682,41 @@ if (module.parent) return; // required as a module
                     if (a > b) return -1;
                     return 0;
                 });
+                var totalSize = 0;
                 backuppath.forEach(x => {
+                    var name = `${chalk.cyan(x.split(` - `)[0])} - ${since(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`;
+                    var backupinfo = `${config.backup.folder}/${x}/backupinfo.json`;
+                    if (fs.existsSync(backupinfo)) {
+                        var info = fs.readFileSync(backupinfo);
+                        if (!isJsonString(info)) return;
+                        info = JSON.parse(info);
+                        if (info.size)
+                            totalSize += info.size;
+                        name = `${chalk.cyan(info.id)} - ${info.full ?
+                            chalk.yellow(info.modname ? info.modname : `[full]`) :
+                            info.modname ? staticCText(info.modname) : chalk.gray(`[empty]`)} - ${since(new Date(new Date().toUTCString()) - new Date(info.date))} - ${chalk.cyan(humanFileSize(info.size, true, 0).toLowerCase().replace(` `, ``))}`;
+                    }
                     listBackupOptions.push({
-                        name: `${chalk.cyan(x.split(` - `)[0])} - ${since(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`,
+                        name: name,
                         color: `#FFFFFF`,
                         run: () => loadbackup(x.split(` - `)[0]),
+                        /*key: (k) => {
+                            switch (k) {
+                                case `d`:
+                                    // delete?
+                                    break;
+                            }
+                        },*/
                     });
+                });
+                listBackupOptions.splice(1, 0, {
+                    name: `Total Size: ${humanFileSize(totalSize, true).toLowerCase().replace(` `, ``)}`,
+                    color: `#FFFFFF`,
                 });
                 selectedMenu = listBackupOptions;
                 selected = 0;
             },
-            hidden: () => fs.existsSync(`${__dirname}/backups`) && fs.readdirSync(`${__dirname}/backups`).length,
+            hidden: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
         },
         {
             name: `settings`,
@@ -1689,7 +1724,7 @@ if (module.parent) return; // required as a module
             run: (self) => {
                 var settingsMenu = [
                     {
-                        name: () => `${config.ProjectName} > ${config.ModName}`,
+                        name: () => `${config.ProjectName} > ${staticCText(config.ModName)}`,
                     },
                     {
                         name: `back`,
@@ -1762,7 +1797,7 @@ if (module.parent) return; // required as a module
                 selectedMenu = settingsMenu;
                 selected = 1;
             },
-            hidden: () => fs.existsSync(`${__dirname}/backups`) && fs.readdirSync(`${__dirname}/backups`).length,
+            hidden: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
         },
         {
             name: (self) => self.running == undefined ? `drg` : self.running == false ? `drg` : `launching...`,
@@ -2244,6 +2279,8 @@ if (module.parent) return; // required as a module
             selectedMenu = selectedMenu.filter(x => x.hidden ? x.hidden() : true);
             //console.log(key);
             //consolelog(k);
+            if (selectedOption && selectedOption.key)
+                selectedOption.key(k);
             switch (k) {
                 case `w`:
                 case `up`:
@@ -2557,7 +2594,7 @@ if (module.parent) return; // required as a module
     if (process.argv.includes(`-bu`)) return backup();
 
     if (process.argv.find(x => x.includes(`-listbu`))) { // list backups
-        var backuppath = fs.readdirSync(`${__dirname}/backups`)
+        var backuppath = fs.readdirSync(config.backup.folder)
         if (!backuppath) return consolelog(`Invalid backup id!`);
         backuppath.sort(function (a, b) {
             var a = new Date(new Date().toUTCString()) - new Date(a.split(` - `)[1])
@@ -2760,6 +2797,8 @@ if (module.parent) return; // required as a module
                         `LogClass: `,
                         `LogBlueprint: `,
                         `LogWindows: `,
+                        `LogAudioDebug: `,
+                        `LogTextureFormatOodle: `,
                     ];
                     const allPrefixes = [
                         `LogInit: `,
