@@ -1,6 +1,8 @@
 *
 
 !compile.js
+!winBuild.js
+!creaper.ico
 !package.json
 !umodel
 !umodel.exe

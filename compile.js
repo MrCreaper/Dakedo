@@ -1932,7 +1932,7 @@ if (module.parent) return; // required as a module
                                 },
                                 {
                                     name: `project (toucan)`,
-                                    color: `#ff00ff`,
+                                    color: `#ff8c00`,
                                     run: () => updateProject(false, false, true),
                                 },
                                 {
@@ -2057,6 +2057,15 @@ if (module.parent) return; // required as a module
                             selected = 0;
                         },
                     },
+                    /*{ // feels like a bit too In-your-face
+                        name: `make template`,
+                        color: `#ff8c00`,
+                        run: () => {
+                            fs.copy(`${ProjectPath}Content/Toucan/template`, `${ProjectPath}Content/template`);
+                            consolelog(`Made template`);
+                        },
+                        hidden: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
+                    },*/
                     {
                         name: `debug`,
                         color: `#00ff00`,
@@ -2233,10 +2242,11 @@ if (module.parent) return; // required as a module
                                     name: `notes`,
                                     color: `#ffffff`,
                                     run: (self) => {
-                                        var vars = {
+                                        var notes = {
                                             "game log": `-log=${__dirname}/fuckinglogs.txt`,
+                                            "start cmd": process.argv0,
                                         };
-                                        var varsMenu = [
+                                        var notesMenu = [
                                             {
                                                 name: `back`,
                                                 color: `#00FFFF`,
@@ -2245,20 +2255,20 @@ if (module.parent) return; // required as a module
                                                 }
                                             },
                                         ];
-                                        Object.keys(vars).forEach(key => {
-                                            var val = vars[key];
-                                            varsMenu.push(
+                                        Object.keys(notes).forEach(key => {
+                                            var val = notes[key];
+                                            notesMenu.push(
                                                 {
                                                     name: `${key}:`,
                                                 }
                                             );
-                                            varsMenu.push(
+                                            notesMenu.push(
                                                 {
                                                     name: `${val}`,
                                                 }
                                             );
                                         });
-                                        selectedMenu = varsMenu;
+                                        selectedMenu = notesMenu;
                                         selected = 0;
                                     },
                                 },
@@ -2313,7 +2323,7 @@ if (module.parent) return; // required as a module
                             selectedMenu = debugMenu;
                             selected = 0;
                         },
-                        hidden: () => !process.pkg,
+                        //hidden: () => !process.pkg,
                     },
                 ];
                 selectedMenu = miscMenu;
@@ -2584,6 +2594,10 @@ if (module.parent) return; // required as a module
                 if (logPush) {
                     process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
                     process.stdout.write(chalk.gray(String(logPush)));
+                } else {
+                    var ver = `v${require(`./package.json`).version}`;
+                    process.stdout.cursorTo(process.stdout.columns - String(ver).length, process.stdout.rows);
+                    process.stdout.write(chalk.gray(String(ver)));
                 }
             }
 
