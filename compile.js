@@ -320,7 +320,7 @@ var utcNow = new Date(new Date().toUTCString());
 
 var config = {
     ProjectName: "FSD",
-    ModName: ``, // auto found
+    ModName: ``, // auto found | also can be a path like "_CoolGuy/CoolMod"
     ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
@@ -372,7 +372,7 @@ var config = {
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["./"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: [], // folders to copy the zip in.
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
@@ -399,6 +399,7 @@ var config = {
             }
         },
     },
+    forceCookByDefault: false, // force cook just ignores errors and tries to pack.
     update: true, // automaticlly update
 };
 
@@ -516,6 +517,7 @@ updateConfig();
 fs.watchFile(configPath, async (curr, prev) => {
     if (curr.size == prev.size) return;
     updateConfig();
+    setPreset();
     consolelog(chalk.gray(`Updated config`));
 });
 async function updateConfig(readFromFile = true, updateFile = true) {
@@ -706,7 +708,7 @@ module.exports.uploadMod = uploadMod = async (
 ) => {
     return new Promise(async (r, re) => {
         if (!fs.existsSync(zip)) return r(consolelog(`File dosent exist.\n${zip}`));
-        if (fs.statSync(zip).size > 5368709120) return r(consolelog(`Zip bigger then 5gb`));
+        if (fs.statSync(zip).size > 5368709120) return r(consolelog(`Zip bigger then 5gb (${humanFileSize(fs.statSync(zip).size, true, 0).toLowerCase().replace(` `, ``)})`));
         if (String(version) == `[object Promise]`) version = await version;
         var body = {
             filedata: fs.createReadStream(zip),
@@ -858,7 +860,7 @@ module.exports.publish = publish = async function () {
         }
         if (madeZip) fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}.zip`);
         if (config.modio.deleteCache && config.modioCache)
-            fs.rm(`${config.modioCache}/${config.modio.modid}`)
+            fs.rm(`${config.modioCache}/${config.modio.modid}`, { recursive: true, force: true })
 
         r(res == true);
     })
@@ -1174,7 +1176,21 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
 
 module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName]) {
     // cant use ini since it kinda fucks up directories to never cook? (it has the first one in a variable)
-    whitelist = whitelist.concat(config.DirsToCook)
+    whitelist = whitelist.concat(config.DirsToCook);
+    // split up folders for whitelist
+    var newList = [];
+    whitelist.forEach(x => {
+        newList.push(x);
+        var split = x.split(`/`);
+        var pile = [];
+        for (var i = 0; i < split.length - 1; i++) {
+            pile.push(split[i]);
+            var p = pile.join(`/`);
+            if (!newList.includes(p))
+                newList.push(p);
+        }
+    });
+    whitelist = newList;
     // get config
     var configFile = `${ProjectPath}Config/DefaultGame.ini`;
     if (!fs.existsSync(configFile)) {
@@ -1216,8 +1232,24 @@ module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (white
     // remove all old never cooks
     read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
     // find and add new never cooks
-    fs.readdirSync(`${ProjectPath}Content/`).forEach(x => {
-        if (!whitelist.includes(x))
+    var dirs = [];
+    addDir();
+    whitelist.forEach(x => {
+        var split = x.split(`/`);
+        var pile = ``;
+        for (var i = 0; i < split.length - 1; i++) {
+            pile += `${split[i]}/`;
+            addDir(pile);
+        }
+    });
+    function addDir(dir = ``) { // ends with /
+        fs.readdirSync(`${ProjectPath}Content/${dir}`).forEach(x => {
+            if (!whitelist.includes(x))
+                dirs.push(`${dir}${x}`);
+        });
+    }
+    dirs.forEach(x => {
+        if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
             read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
     });
     fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
@@ -1798,7 +1830,8 @@ if (module.parent) return; // required as a module
                         var val = configs[key];
                         switch (typeof val) {
                             case `object`:
-                                return addSettings(val, path.concat([key]));
+                                if (key != `presets`)
+                                    return addSettings(val, path.concat([key]));
                             case `boolean`:
                                 break;
                             default:
@@ -2191,7 +2224,10 @@ if (module.parent) return; // required as a module
                                 {
                                     name: `refresh-dirs-to-never-cook`,
                                     color: `#ffffff`,
-                                    run: () => refreshDirsToNeverCook(),
+                                    run: () => {
+                                        refreshDirsToNeverCook();
+                                        consolelog(`Refreshed`);
+                                    },
                                 },
                                 {
                                     name: `notes`,
@@ -2590,7 +2626,7 @@ if (module.parent) return; // required as a module
             return exitHandler();
         } else {
             await unpack(unpackFile);
-            consolelog(`Unpacked ${chalk.cyan(PATH.basename(unpackFile))}`);
+            consolelog(`Unpacked ${chalk.cyan(PATH.basename(unpackFile.replace(`.pak`, ``)))}`);
             return exitHandler();
         }
 
@@ -2878,8 +2914,8 @@ if (module.parent) return; // required as a module
                     return d;
                 }
                 var d = cleanLogs();
-                if (d.includes(`Success - 0 error(s),` || force)) {
-                    consolelog(chalk.greenBright(`Cooked!${!d.includes(`Success - 0 error(s),`) && force ? ` ;)` : ``}`), undefined, undefined, undefined, log);
+                if (d.includes(`Success - 0 error(s),`) || force || config.forceCookByDefault) {
+                    consolelog(chalk.greenBright(`Cooked!${!d.includes(`Success - 0 error(s),`) && (force || config.forceCookByDefault) ? ` ;)` : ``}`), undefined, undefined, undefined, log);
                     await pack();
                     r();
                 } else if (d.includes(`Failure - `)) {

@@ -93,6 +93,7 @@ var config = {
             }
         },
     },
+    forceCookByDefault: false, // force cook just ignores errors and tries to pack.
     update: true, // automaticlly update
 };
 ```
@@ -109,18 +110,17 @@ var config = {
 ## Shortcuts
 
 If you dont want to do a simple cook & publish then you can just run normal nodejs code as well,
-just start it with "code{newline}".
+just start it with "code\n".
 
 Example:
 
 ```js
-{
+var codeShortcut = {
     name: "hack the mainframe",
     color: "00ff00",
-    run: "code
-    consolelog(`Mainframe hacked!`);",
+    run: "code\nconsolelog(`Mainframe hacked!`);",
     index: -1,
-}
+};
 ```
 
 ### Shortcut functions
@@ -174,3 +174,8 @@ compiler.cook(); // or something
 ```
 
 and mess around.
+
+### Why "compiler"?
+
+Originally it was just a script to run the cook command so it was (and still is) called `compile.js`.
+But calling it "drg-modding-hub" sounds a bit too much like mod-hub, which is cringe.
