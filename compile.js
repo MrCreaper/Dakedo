@@ -513,7 +513,7 @@ const runningRoot = process.getuid && process.getuid() == 0; // dosent exist on 
 
 var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
 //if (!runningRoot) // I dont remember why this is here
-updateConfig();
+if (updateConfig() != true) exitHandler();
 fs.watchFile(configPath, async (curr, prev) => {
     if (curr.size == prev.size) return;
     updateConfig();
@@ -632,6 +632,7 @@ async function updateConfig(readFromFile = true, updateFile = true) {
 
     if (readFromFile && updateFile)
         setPreset();
+    return true;
 }
 
 function logFile(log) {
@@ -1353,33 +1354,36 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/P
         .stdout.on('data', (d) => logFile(String(d)));
 }
 
-async function update(repo = `MrCreaper/drg-linux-modding`) {
+async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
     if (!repo) return;
-    const version = require(`./package.json`).version;
+    const ver = require(`./package.json`).version;
     return new Promise(async r => {
+        var log = consolelog(`Updating...`);
         var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
         resp = await resp.json();
-        if (resp.message) return r(); //console.log(resp); // usually rate limit error
-        if (resp.tag_name.toLocaleLowerCase().replace(/v/g, ``) == version && !resp.draft && !resp.prerelease) return r();
-        if (!process.pkg) {
-            r();
-            return consolelog(`Not downloading update for .js version`);
-        }
+        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`))}`, undefined, undefined, undefined, log)); // usually rate limit error
+        var newVer = resp.tag_name.toLocaleLowerCase().replace(/v/g, ``);
+        if (newVer == ver) return r(consolelog(`Up-to-date ${newVer}`, undefined, undefined, undefined, log));
+        if (resp.draft) return r(consolelog(`Not downloading draft update`, undefined, undefined, undefined, log));
+        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft update`, undefined, undefined, undefined, log));
+        if (!process.pkg) return r(consolelog(`Not downloading update for .js version`, undefined, undefined, undefined, log));
         const asset = resp.assets.find(x => x.name.includes(os.platform()));
-        if (!asset) return consolelog(`No compatible update download found.. (${os.platform()})`);
-        consolelog(`Downloading update...`);
+        if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`, undefined, undefined, undefined, log));
+        consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
         //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
         download(asset.browser_download_url,)
         function download(url) {
             https.get(url, down => {
                 if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                var filePath = `${__dirname}/${asset.name.replace(`-${os.platform()}`, ``)}`;
+                var filePath = `${__dirname}/${PATH.basename(process.argv0.split(` `)[0])}`;
+                if (fs.existsSync(filePath)) return r(consolelog(`I dont exist..?`, undefined, undefined, undefined, log));
+                fs.rmSync(filePath);
                 var file = fs.createWriteStream(filePath);
                 down.pipe(file
                     .on(`finish`, () => {
                         file.close();
-                        fs.chmodSync(filePath, 0777)
-                        consolelog(`Update finished! ${version} => ${resp.tag_name.replace(/v/g, ``)}`);
+                        fs.chmodSync(filePath, 0777);
+                        consolelog(`Update finished! ${ver} => ${resp.tag_name.replace(/v/g, ``)}`, undefined, undefined, undefined, log);
                         child.spawn(process.argv[0], process.argv.slice(1), {
                             stdio: 'inherit',
                         });
@@ -1627,6 +1631,7 @@ if (fs.existsSync(`${__dirname}/.temp/`)) { // remove temp folder if exitHandler
 }
 async function exitHandler(err) {
     if (fs.existsSync(`${__dirname}/.temp/`) && process.pkg) fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
+    if (!Array.isArray(children)) return console.log(children);
     children.forEach(x => {
         if (!x.kill)
             console.log(`This isnt a fucking child!`);
@@ -1635,7 +1640,7 @@ async function exitHandler(err) {
         children.splice(children.findIndex(x => x == x), 1);
     });
     if (err && err != `SIGINT` && err.name && err.message) console.log(err);
-    if (process.pkg && err) await keypress();
+    if (process.pkg && err != true) await keypress();
     process.exit();
 }
 process.on('exit', exitHandler);
@@ -2333,7 +2338,7 @@ if (module.parent) return; // required as a module
         {
             name: `quit`,
             color: `#ff0000`,
-            run: exitHandler,
+            run: () => exitHandler(true),
         },
     ];
     config.ui.shortcuts.forEach(x => {
