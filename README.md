@@ -4,7 +4,7 @@ A compiler that runs and is nice
 
 ## UI
 
-Move with `up`/`w` and `down`/`s`, `left`/`a` and `right`/`d` to move logs and `enter`/`return`/`space` to select.
+Move with `up` / `w` and `down` / `s`, `left` / `a` and `right` / `d` to move logs and `enter` / `return` / `space` to select.
 `tab` to go to "logMode", which just hides the options and lets you focus on the logs.
 
 p.s `ctrl+c` = abort. So please use `q` or the quit option.
@@ -14,7 +14,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 ```js
 var config = {
     ProjectName: "FSD",
-    ModName: ``, // auto found | also can be a path like "_CoolGuy/CoolMod"
+    ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
     ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
@@ -45,14 +45,7 @@ var config = {
         enabled: true,  // use the ui version by default
         cleanBox: true, // clean logs around the options
         cleanSelected: false, // clean logs only between selection arrows
-        shortcuts: [
-            /*{
-                name: "cook & publish", // display name
-                color: "00f0f0", // hex color
-                run: "cook,publish", // functions
-                index: 2, // index on list
-            },*/
-        ],
+        shortcuts: [],
         selectArrows: true,
     },
     backup: {
@@ -109,17 +102,17 @@ var config = {
 
 ## Shortcuts
 
-If you dont want to do a simple cook & publish then you can just run normal nodejs code as well,
+If you want to you can run normal nodejs code as well,
 just start it with "code\n".
 
 Example:
 
 ```js
 var codeShortcut = {
-    name: "hack the mainframe",
-    color: "00ff00",
-    run: "code\nconsolelog(`Mainframe hacked!`);",
-    index: -1,
+    name: "hack the mainframe", // display name
+    color: "00ff00", // hex color
+    run: "code\nconsolelog(`Mainframe hacked!`);", // code or functions seperated by ","
+    index: -1, // index on list
 };
 ```
 

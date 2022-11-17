@@ -327,7 +327,7 @@ var utcNow = new Date(new Date().toUTCString());
 
 var config = {
     ProjectName: "FSD",
-    ModName: ``, // auto found | also can be a path like "_CoolGuy/CoolMod"
+    ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
     ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
@@ -358,14 +358,7 @@ var config = {
         enabled: true,  // use the ui version by default
         cleanBox: true, // clean logs around the options
         cleanSelected: false, // clean logs only between selection arrows
-        shortcuts: [
-            /*{
-                name: "cook & publish", // display name
-                color: "00f0f0", // hex color
-                run: "cook,publish", // functions
-                index: 2, // index on list
-            },*/
-        ],
+        shortcuts: [],
         selectArrows: true,
     },
     backup: {
@@ -412,7 +405,6 @@ var config = {
 
 var selectedPresetKey = ``;
 
-const ogdirname = __dirname;
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 const ProjectPath = PATH.resolve(`${__dirname}${config.ProjectFile}`).replace(PATH.basename(config.ProjectFile), ``);
 const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine (dirname dosent end with /)
@@ -2154,13 +2146,13 @@ if (module.parent) return; // required as a module
                                 `Terminal=true`,
                                 `Exec=${process.argv.join(` `)}`,
                                 `Comment=${package.description.replace(/\n/g, ` `)}`,
-                                `Icon=/home/${os.userInfo().username}/.local/share/applications/creaper.png`,
+                                `Icon=/home/${username}/.local/share/applications/creaper.png`,
                             ];
-                            fs.writeFileSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`, lines.join(`\n`));
-                            fs.copySync(`${__dirname}/creaper.png`, `/home/${os.userInfo().username}/.local/share/applications/creaper.png`);
+                            fs.writeFileSync(`/home/${username}/.local/share/applications/${package.name}.desktop`, lines.join(`\n`));
+                            fs.copySync(`${__dirname}/creaper.png`, `/home/${username}/.local/share/applications/creaper.png`);
                             consolelog(`Shortcut added`);
                         },
-                        hidden: () => os.platform() == `linux` && !fs.existsSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`),
+                        hidden: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${package.name}.desktop`),
                     },
                     {
                         name: `debug`,
