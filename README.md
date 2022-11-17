@@ -93,12 +93,12 @@ var config = {
 
 ### Config path variables
 
-- {UnrealEngine}
-- {drg}
-- {me} - username
-- {mod} - modname
-- {pf} - project file (.uproject)
-- {dir} - compiler directory (win on wine)
+- `{UnrealEngine}`
+- `{drg}`
+- `{me}` - username
+- `{mod}` - modname
+- `{pf}` - project file (.uproject)
+- `{dir}` - compiler directory (win on wine)
 
 ## Shortcuts
 
@@ -126,33 +126,31 @@ var codeShortcut = {
 ## Compiler Options
 
 If you are too cool for the UI you can use options. Using any options disables ui.
+Default is cooking.
 
-- -verify (verifies settings, prob)
-- {mod name} (just adding a mod name will set it as the ModName for the compile)
-- -drg (toggles startDRG)
-- -bu (backups)
-- -lbu{id} (loads backup, exclude id to unload backup) (NOTE: dose not load all of "full" backups)
-- -listbu (lists backups)
-- {pak file} (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
-- -unpackdrg (unpacks drg)
-- -publish (publishes version to modio)
-- -export (uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else)
-- -exportFlat (same as above but flattens textures to a single folder)
-
-No "clear backups" command, you clear that on your own. Your tears.
+- `{mod name}` (just adding a mod name will set it as the ModName for the compile)
+- `{pak file}` (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
+- `-verify` (verifies settings, prob)
+- `-drg` (toggles startDRG)
+- `-bu` (backups)
+- `-lbu{id}` (loads backup, exclude id to unload backup) (NOTE: dose not load all of "full" backups)
+- `-listbu` (lists backups)
+- `-unpackdrg` (unpacks drg)
+- `-publish` (publishes version to modio)
+- `-export` (uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else)
+- `-exportFlat` (same as above but flattens textures to a single folder)
 
 ## Install
 
-1. Download the [latest release](https://github.com/MrCreaper/drg-linux-modding/releases/latest)
-2. Make the folder hieracy something like this (or u know edit the config ¯\\\_(ツ)\_/¯)
-   - FSD
-     - FSD.uproject
-     - compiler
-       - compiler.exe
+Make the folder hieracy something like this (or u know edit the config ¯\\\_(ツ)\_/¯)
 
-3. Skim over/setup the config.json
+- FSD
+  - FSD.uproject
+    - compiler
+      - [compiler.exe](https://github.com/MrCreaper/drg-modding-compiler/releases/latest)
+      - [config.json](#config) (generated on first run)
 
-### development
+### Development
 
 Build with `npm run pkg`
 
