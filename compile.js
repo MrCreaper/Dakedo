@@ -65,6 +65,7 @@ function consolelog(
     }
     if (event)
         consoleloge.emit(`log`, log);
+    setTerminalTitle(`${package.name} - ${log}`);
     return i;
 }
 
@@ -290,6 +291,11 @@ const dirSize = async directory => {
     return (await Promise.all(stats)).reduce((accumulator, { size }) => accumulator + size, 0);
 }
 
+function setTerminalTitle(title) {
+    process.stdout.write(`${String.fromCharCode(27)}]0;${title}${String.fromCharCode(7)}`);
+}
+setTerminalTitle(package.name);
+
 /**
  * Clears swap and ram
  * @param {boolean} force 
@@ -406,6 +412,7 @@ var config = {
 
 var selectedPresetKey = ``;
 
+const ogdirname = __dirname;
 __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
 const ProjectPath = PATH.resolve(`${__dirname}${config.ProjectFile}`).replace(PATH.basename(config.ProjectFile), ``);
 const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine (dirname dosent end with /)
@@ -1413,7 +1420,6 @@ async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
     if (!repo) return;
     const ver = require(`./package.json`).version;
     return new Promise(async r => {
-        var log = consolelog(`Updating...`);
         var resp = await getJson({
             hostname: 'api.github.com',
             port: 443,
@@ -1423,17 +1429,17 @@ async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
                 'User-Agent': `${package.name}/${ver}`,
             },
         });
-        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`, undefined, undefined, undefined, log)); // usually rate limit error
+        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`)); // usually rate limit error
         var newVer = resp.tag_name.toLocaleLowerCase().replace(/v/g, ``);
-        if (newVer == ver) return r();//r(consolelog(`Up-to-date ${newVer}`, undefined, undefined, undefined, log));
-        if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`), undefined, undefined, undefined, log));
-        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft prerelease`, undefined, undefined, undefined, log));
-        if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`), undefined, undefined, undefined, log));
+        if (newVer == ver) return r();//r(consolelog(`Up-to-date ${newVer}`);
+        if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`)));
+        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft prerelease`));
+        if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`)));
         const asset = resp.assets.find(x => x.name.includes(os.platform()));
-        if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`, undefined, undefined, undefined, log));
+        if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`));
         var filePath = process.argv[0];
         if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
-        consolelog(`Downloading update... ${ver} => ${newVer}\n${filePath}`, undefined, undefined, undefined, log);
+        var log = consolelog(`Downloading update... ${ver} => ${newVer}\n${filePath}`, undefined, undefined, undefined, log);
         //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
         download(asset.browser_download_url);
         function download(url) {
@@ -2385,6 +2391,29 @@ if (module.parent) return; // required as a module
                                         selectedMenu = varsMenu;
                                         selected = 0;
                                     },
+                                },
+                                {
+                                    name: `add desktop shortcut`,
+                                    color: `#ffffff`,
+                                    run: (self) => {
+                                        // https://wiki.archlinux.org/title/desktop_entries
+                                        // https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#recognized-keys
+                                        var lines = [
+                                            `[Desktop Entry]`,
+                                            `Version=1.5`,
+                                            `Name=${package.name}`, // required
+                                            `Path=${__dirname}`,
+                                            `Type=Application`, // required
+                                            `Terminal=true`,
+                                            `Exec=${process.argv.join(` `)}`,
+                                            `Comment=${package.description.replace(/\n/g, ` `)}`,
+                                            `Icon=/home/${os.userInfo().username}/.local/share/applications/creaper.png`,
+                                        ];
+                                        fs.writeFileSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`, lines.join(`\n`));
+                                        fs.copySync(`${__dirname}/creaper.png`,`/home/${os.userInfo().username}/.local/share/applications/creaper.png`);
+                                        consolelog(`Shortcut added`);
+                                    },
+                                    hidden: () => os.platform() == `linux`,
                                 },
                             ];
                             selectedMenu = debugMenu;

@@ -30,7 +30,9 @@
   "pkg": {
     "assets": [
       "./umodel",
-      "./umodel.exe"
+      "./umodel.exe",
+      "LICENSE",
+      "creaper.png"
     ],
     "targets": [
       "node18-linux-x64",
