@@ -13,6 +13,7 @@ const ini = require('ini');
 const { EventEmitter } = require(`events`);
 class Emitter extends EventEmitter { }
 const consoleloge = new Emitter();
+const package = require(`./package.json`);
 
 var latestLog = ``;
 var logHistory = [];
@@ -310,7 +311,7 @@ function removeColor(input) {
 
 function staticCText(str) { // static colored text
     if (!config.logging.staticColor) return chalk.cyan(str);
-    return chalk.hex(`#${crypto.createHash('md5').update(str).digest('hex').slice(0, 5)}`)(str)
+    return chalk.bgHex(`#${crypto.createHash('md5').update(str).digest('hex').slice(0, 5)}`)(str)
 }
 
 function getUsername() {
@@ -364,7 +365,7 @@ var config = {
     backup: {
         folder: "./backups", // leave empty for no backups
         onCompile: true,
-        max: 5, // -1 for infinite
+        max: 5, // Maximum backups for each mod. -1 for infinite
         pak: false,
         blacklist: [".git"],
         all: false, // backup the entire project by default
@@ -872,9 +873,17 @@ module.exports.template = template = async function () {
         const dir = `${config.drg}/FSD/Binaries/Win64/`;
         fs.mkdirsSync(dir);
 
-        var resp = await fetch(`https://api.github.com/repos/${`UE4SS/UE4SS`}/releases/latest`);
-        resp = await resp.json();
-        if (resp.message) return r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
+        var resp = await getJson({
+            hostname: 'api.github.com',
+            port: 443,
+            protocol: 'https:',
+            path: `/repos/${`UE4SS/UE4SS`}/releases/latest`,
+            method: 'GET',
+            headers: {
+                'User-Agent': `${package.name}/${ver}`,
+            },
+        });
+        if (resp.message) return r();//r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
         function download(url, filePath) {
             return new Promise(async r => {
                 https.get(url, async down => {
@@ -949,8 +958,7 @@ module.exports.template = template = async function () {
         });
         // PART 2 - The building.
 
-        var resp = await fetch(`https://api.github.com/repos/${`modio/modio-ue4`}/releases/latest`);
-        resp = await resp.json();
+        var resp = await getJson(`https://api.github.com/repos/${`modio/modio-ue4`}/releases/latest`);
         if (resp.message) return r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
         var asset = resp.assets.find(x => x.name.includes(`modio`)); // download xinput for windows and standard for anything else
         await download(asset.browser_download_url, dir);
@@ -1109,9 +1117,9 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
                 else
                     fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
-
+                    const backupInfo = `backupinfo.json`;
             // backup info
-            fs.writeJSONSync(`${buf}/backupinfo.json`, {
+            fs.writeJSONSync(`${buf}/${backupInfo}`, {
                 id: id,
                 date: new Date(),
                 size: await dirSize(buf),
@@ -1150,16 +1158,29 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     if (aid < bid) return -1;
                     if (aid > bid) return 1;
                     return 0;
-                }).filter(x => {
-
                 }); // oldest => newest
-                backups.forEach((x, i) => {
-                    //if(i == 0) return; // keep oldest as a keepsake
-                    if (backups.length - i - 1 > config.backup.max) {
-                        //var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
+                var backupsForMods = {};
+                backups.forEach(x => {
+                    function wipe() {
                         fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
-                        //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
                     }
+                    if (!fs.existsSync(`${config.backup.folder}/${x}/${backupInfo}`)) return wipe()
+                    var info = fs.readFileSync(`${config.backup.folder}/${x}/${backupInfo}`);
+                    if (!isJsonString(info)) return wipe();
+                    info = JSON.parse(info);
+                    if(!info.modname)return wipe();
+                    if(!backupsForMods[info.modname])backupsForMods[info.modname] = [];
+                    backupsForMods[info.modname].push(x);
+                });
+                Object.values(backupsForMods).forEach(backups => {
+                    backups.forEach((x, i) => {
+                        //if(i == 0) return; // keep oldest as a keepsake
+                        if (backups.length - i - 1 > config.backup.max) {
+                            //var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
+                            fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
+                            //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
+                        }
+                    });
                 });
             }
 
@@ -1354,29 +1375,70 @@ module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/P
         .stdout.on('data', (d) => logFile(String(d)));
 }
 
+function getJson(options = {
+    hostname: 'api.github.com',
+    port: 443,
+    protocol: 'https:',
+    path: `/repos/${repo}/releases/latest`,
+    method: 'GET',
+    headers: {
+        'User-Agent': `${package.name}/${ver}`,
+    },
+}) {
+    return new Promise(async re => {
+        var req = https.get(options, (res) => {
+            var data = [];
+            res.on('data', (d) => data.push(d));
+            req.on(`close`, async () => {
+                var buffer = Buffer.concat(data).toString();
+                if (!isJsonString(buffer)) return consolelog(buffer);
+                var resp = JSON.parse(buffer);
+                if (res.statusCode == 301 && res.headers.location) {
+                    options.path = new URL(res.headers.location).pathname;
+                    return re(await getJson(options));
+                }
+                re(resp);
+            });
+        });
+
+        req.on('error', (e) => {
+            consolelog(`Error getting json:`);
+            consolelog(e);
+            re(e);
+        });
+    });
+}
+
 async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
     if (!repo) return;
     const ver = require(`./package.json`).version;
     return new Promise(async r => {
         var log = consolelog(`Updating...`);
-        var resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
-        resp = await resp.json();
-        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`))}`, undefined, undefined, undefined, log)); // usually rate limit error
+        var resp = await getJson({
+            hostname: 'api.github.com',
+            port: 443,
+            path: `/repos/${repo}/releases/latest`,
+            method: 'GET',
+            headers: {
+                'User-Agent': `${package.name}/${ver}`,
+            },
+        });
+        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`, undefined, undefined, undefined, log)); // usually rate limit error
         var newVer = resp.tag_name.toLocaleLowerCase().replace(/v/g, ``);
-        if (newVer == ver) return r(consolelog(`Up-to-date ${newVer}`, undefined, undefined, undefined, log));
-        if (resp.draft) return r(consolelog(`Not downloading draft update`, undefined, undefined, undefined, log));
-        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft update`, undefined, undefined, undefined, log));
-        if (!process.pkg) return r(consolelog(`Not downloading update for .js version`, undefined, undefined, undefined, log));
+        if (newVer == ver) return r();//r(consolelog(`Up-to-date ${newVer}`, undefined, undefined, undefined, log));
+        if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`), undefined, undefined, undefined, log));
+        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft prerelease`, undefined, undefined, undefined, log));
+        if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`), undefined, undefined, undefined, log));
         const asset = resp.assets.find(x => x.name.includes(os.platform()));
         if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`, undefined, undefined, undefined, log));
-        consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
+        var filePath = process.argv[0];
+        if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
+        consolelog(`Downloading update... ${ver} => ${newVer}\n${filePath}`, undefined, undefined, undefined, log);
         //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
-        download(asset.browser_download_url,)
+        download(asset.browser_download_url);
         function download(url) {
             https.get(url, down => {
                 if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
-                var filePath = `${__dirname}/${PATH.basename(process.argv0.split(` `)[0])}`;
-                if (fs.existsSync(filePath)) return r(consolelog(`I dont exist..?`, undefined, undefined, undefined, log));
                 fs.rmSync(filePath);
                 var file = fs.createWriteStream(filePath);
                 down.pipe(file
@@ -1384,7 +1446,7 @@ async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
                         file.close();
                         fs.chmodSync(filePath, 0777);
                         consolelog(`Update finished! ${ver} => ${resp.tag_name.replace(/v/g, ``)}`, undefined, undefined, undefined, log);
-                        child.spawn(process.argv[0], process.argv.slice(1), {
+                        child.spawn(process.argv[0], [], {
                             stdio: 'inherit',
                         });
                         //process.exit(); // will make the child proccss "unkillable"
@@ -1663,7 +1725,7 @@ if (module.parent) return; // required as a module
         consolelog(`User: ${chalk.cyan(username)}`);
         updateConfig();
     }
-    if (config.update) await update();
+    if (config.update) update();
 
     function getOptionIndex(name = `cook`, menu = selectedMenu) {
         return menu.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == name);
@@ -1734,7 +1796,7 @@ if (module.parent) return; // required as a module
                             info.modname ? staticCText(info.modname) : chalk.gray(`[empty]`)} - ${since(new Date(new Date().toUTCString()) - new Date(info.date))} - ${chalk.cyan(humanFileSize(info.size, true, 0).toLowerCase().replace(` `, ``))}`;
                     }
                     listBackupOptions.push({
-                        name: name,
+                        name: name, // I could make this dyn() but think that would be a bit ineffecient
                         color: `#FFFFFF`,
                         run: () => loadbackup(x.split(` - `)[0]),
                         key: (k) => {
