@@ -1,6 +1,6 @@
 {
   "name": "compiler",
-  "version": "0.0.0",
+  "version": "0.0.3",
   "description": "Compiler for drg\nhttps://github.com/MrCreaper/drg-modding-compiler",
   "main": "compile.js",
   "scripts": {

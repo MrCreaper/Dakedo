@@ -384,6 +384,7 @@ var config = {
         msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
         xm: true, // use am/pm or 24h
         updateCache: true, // update cache for the mod, no download's needed!
+        apikey: "", // https://mod.io/me/access > API Access | api key for some commands
         cache: "", // auto generated
     },
     presets: {
@@ -1421,17 +1422,17 @@ async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
                 'User-Agent': `${package.name}/${ver}`,
             },
         });
-        if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`)); // usually rate limit error
+        if (resp.message) return r();//r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`)); // usually rate limit error
         var newVer = resp.tag_name.toLocaleLowerCase().replace(/v/g, ``);
         if (newVer == ver) return r();//r(consolelog(`Up-to-date ${newVer}`);
-        if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`)));
-        if (resp.prerelease && !pre) return r(consolelog(`Not downloading draft prerelease`));
+        if (resp.draft) return r();//r(consolelog(chalk.gray(`Not downloading draft update`)));
+        if (resp.prerelease && !pre) return r();//r(consolelog(`Not downloading prerelease update`));
         if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`)));
         const asset = resp.assets.find(x => x.name.includes(os.platform()));
         if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`));
         var filePath = process.argv[0];
         if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
-        var log = consolelog(`Downloading update... ${ver} => ${newVer}\n${filePath}`, undefined, undefined, undefined, log);
+        var log = consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
         //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
         download(asset.browser_download_url);
         function download(url) {
@@ -1451,6 +1452,39 @@ async function update(repo = `MrCreaper/drg-linux-modding`, pre = false) {
                         //r(); // wait forever
                     }))
             });
+
+            /*
+                    https.get(`https://codeload.github.com/${repo}/zip/main`, async res => {
+            if (!res.headers['content-length']) {
+                consolelog(`github fuckery, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
+                return r(await downloadRepo.call(null, ...arguments));
+            }
+            var size = parseInt(res.headers['content-length']);
+            var downloaded = 0;
+            consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
+            fs.mkdirsSync(`${__dirname}/.temp/`);
+            var zip = `${__dirname}/.temp/${repo.replace(`/`, ``)}.zip`;
+            res.on(`data`, d => {
+                downloaded += d.length;
+                consolelog(`Downloading ${(downloaded / size * 100).toFixed(2)}%`, undefined, undefined, undefined, mLog);
+            })
+                .pipe(fs.createWriteStream(zip))
+                .on(`close`, async () => {
+                    consolelog(`Downloaded, extracting...`, undefined, undefined, undefined, mLog);
+                    // extract downloaded zip
+                    await zl.extract(zip, `${__dirname}/.temp/${repo.replace(`/`, ``)}`);
+                    consolelog(`Extracted`, undefined, undefined, undefined, mLog);
+                    // simplify directiories
+                    fs.moveSync(`${__dirname}/.temp/${repo.replace(`/`, ``)}/${repo.split(`/`)[1]}-main/`, path, { overwrite: true });
+                    r(true);
+                });
+        })
+            .on('error', (e) => {
+                consolelog(`Error downloading source zip:`);
+                consolelog(e);
+                r(e);
+            });
+            */
         }
     });
 }
@@ -2122,7 +2156,7 @@ if (module.parent) return; // required as a module
                             selected = 0;
                         },
                     },
-                    /*{ // feels like a bit too In-your-face
+                    { // feels like a bit too in-your-face, but its in the misc menu so its not THAT in-your-face
                         name: `make template`,
                         color: `#ff8c00`,
                         run: () => {
@@ -2130,7 +2164,7 @@ if (module.parent) return; // required as a module
                             consolelog(`Made template`);
                         },
                         hidden: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
-                    },*/
+                    },
                     {
                         name: `add desktop shortcut`,
                         color: `#ffffff`,
@@ -2407,6 +2441,63 @@ if (module.parent) return; // required as a module
                                         selected = 0;
                                     },
                                 },
+                                {
+                                    name: `get input`,
+                                    color: `#ffffff`,
+                                    run: async (self) => {
+                                        consolelog(await getInput(`Debug input:`));
+                                    }
+                                },
+                                {
+                                    name: `download mod`,
+                                    color: `#ffffff`,
+                                    run: async (self) => {
+                                        var modid = await getInput(`mod id:`, true);
+                                        if (!config.modio.apikey) return consolelog(`No given api key`);
+                                        var mLog = consolelog(`Finding mod...`);
+                                        var resp = await getJson(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${modid}?api_key=${config.modio.apikey}`);
+                                        if (resp.error && resp.error.message) return consolelog(resp.error.message);
+                                        if (!resp.modfile) return consolelog(`No modfile for mod`);
+
+                                        download(resp.modfile.download.binary_url);
+                                        function download(url) {
+                                            return new Promise(r => {
+                                                https.get(url, async res => {
+                                                    if (res.headers.location) return r(await download(res.headers.location));
+                                                    if (!res.headers['content-length']) {
+                                                        consolelog(`github fuckery, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
+                                                        return;
+                                                    }
+                                                    var size = parseInt(res.headers['content-length']);
+                                                    var downloaded = 0;
+                                                    consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
+                                                    fs.mkdirsSync(`${__dirname}/.temp/`);
+                                                    var zip = `${__dirname}/.temp/${resp.name.replace(/\//g, ``)}.zip`;
+                                                    res.on(`data`, d => {
+                                                        downloaded += d.length;
+                                                        consolelog(`Downloading ${(downloaded / size * 100).toFixed(2)}%`, undefined, undefined, undefined, mLog);
+                                                    })
+                                                        .pipe(fs.createWriteStream(zip))
+                                                        .on(`close`, async () => {
+                                                            consolelog(`Downloaded, extracting...`, undefined, undefined, undefined, mLog);
+                                                            // extract downloaded zip
+                                                            await zl.extract(zip, zip.replace(`.zip`, ``));
+                                                            consolelog(`Extracted`, undefined, undefined, undefined, mLog);
+                                                            // simplify directiories
+                                                            fs.moveSync(zip.replace(`.zip`, ``), `${config.drg}/FSD/Mods/${resp.name.replace(/\//g, ``)}`, { overwrite: true });
+                                                            consolelog(`Done`, undefined, undefined, undefined, mLog);
+                                                            r(true);
+                                                        });
+                                                })
+                                                    .on('error', (e) => {
+                                                        consolelog(`Error downloading source zip:`);
+                                                        consolelog(e);
+                                                        r(e);
+                                                    });
+                                            });
+                                        }
+                                    }
+                                },
                             ];
                             selectedMenu = debugMenu;
                             selected = 0;
@@ -2450,6 +2541,26 @@ if (module.parent) return; // required as a module
     });
     var selectedMenu = mainMenu;
 
+    var isGettingInput = false;
+    var inputNumbersOnly = false;
+    var inputCache = ``;
+    var inputTitle = ``;
+    var inputReturnAt = 999;
+    function getInput(title = ``, numOnly = false, returnAt = 999) {
+        return new Promise(r => {
+            inputTitle = title;
+            inputNumbersOnly = numOnly;
+            inputReturnAt = returnAt;
+            isGettingInput = r;
+        });
+    }
+    function inputDone() {
+        isGettingInput(inputCache);
+        inputCache = ``;
+        isGettingInput = false;
+        draw();
+    }
+
     ////////////////////////////
 
     var selected = 0;
@@ -2468,8 +2579,15 @@ if (module.parent) return; // required as a module
             lastPressKey = k;
             lastPressDate = new Date();
             selectedMenu = selectedMenu.filter(x => x.hidden ? x.hidden() : true);
-            //console.log(key);
+            //consolelog(key);
             //consolelog(k);
+            if (isGettingInput) {
+                if (k == `return` || inputCache.length >= inputReturnAt) return inputDone();
+                if (inputNumbersOnly && isNaN(key.sequence)) return;
+                inputCache += key.sequence;
+                draw();
+                return;
+            }
             if (selectedOption && selectedOption.key)
                 selectedOption.key(k);
             switch (k) {
@@ -2568,6 +2686,17 @@ if (module.parent) return; // required as a module
                 process.stdout.cursorTo(0, i);
                 process.stdout.write(String(x));
             });
+
+            if (isGettingInput) {
+                var Y = Math.floor(process.stdout.rows * .5);
+
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - inputTitle.length * .5), Y - 1); // x=left/right y=up/down
+                process.stdout.write(inputTitle);
+                process.stdout.cursorTo(Math.floor(process.stdout.columns * .5 - inputCache.length * .5), Y); // x=left/right y=up/down
+                process.stdout.write(inputCache);
+
+                return;
+            }
 
             if (!logMode) {
                 // options
@@ -2682,8 +2811,8 @@ if (module.parent) return; // required as a module
                 if (logPush) {
                     process.stdout.cursorTo(process.stdout.columns - String(logPush).length, process.stdout.rows);
                     process.stdout.write(chalk.gray(String(logPush)));
-                } else {
-                    var ver = `v${require(`./package.json`).version}`;
+                } else if (process.pkg) {
+                    var ver = `v${package.version}`;
                     process.stdout.cursorTo(process.stdout.columns - String(ver).length, process.stdout.rows);
                     process.stdout.write(chalk.gray(String(ver)));
                 }
