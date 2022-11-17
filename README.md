@@ -14,7 +14,7 @@ p.s `ctrl+c` = abort. So please use `q` or the quit option.
 ```js
 var config = {
     ProjectName: "FSD",
-    ModName: ``, // auto found
+    ModName: ``, // auto found | also can be a path like "_CoolGuy/CoolMod"
     ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
     UnrealEngine: "", // auto generated
@@ -58,7 +58,7 @@ var config = {
     backup: {
         folder: "./backups", // leave empty for no backups
         onCompile: true,
-        max: 5, // -1 for infinite
+        max: 5, // Maximum backups for each mod. -1 for infinite
         pak: false,
         blacklist: [".git"],
         all: false, // backup the entire project by default
@@ -66,7 +66,7 @@ var config = {
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
         backups: false,
-        to: ["./"], // folders to place the zip in. Add the zip to the current folder, for if you want to add the zip to github and to modio https://github.com/nickelc/upload-to-modio
+        to: [], // folders to copy the zip in.
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access

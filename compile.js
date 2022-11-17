@@ -1117,7 +1117,7 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
                 else
                     fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
-                    const backupInfo = `backupinfo.json`;
+            const backupInfo = `backupinfo.json`;
             // backup info
             fs.writeJSONSync(`${buf}/${backupInfo}`, {
                 id: id,
@@ -1168,8 +1168,8 @@ module.exports.backup = backup = function (full = config.backup.all, limit = con
                     var info = fs.readFileSync(`${config.backup.folder}/${x}/${backupInfo}`);
                     if (!isJsonString(info)) return wipe();
                     info = JSON.parse(info);
-                    if(!info.modname)return wipe();
-                    if(!backupsForMods[info.modname])backupsForMods[info.modname] = [];
+                    if (!info.modname) return wipe();
+                    if (!backupsForMods[info.modname]) backupsForMods[info.modname] = [];
                     backupsForMods[info.modname].push(x);
                 });
                 Object.values(backupsForMods).forEach(backups => {
