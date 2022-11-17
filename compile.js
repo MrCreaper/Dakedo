@@ -2140,6 +2140,29 @@ if (module.parent) return; // required as a module
                         hidden: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
                     },*/
                     {
+                        name: `add desktop shortcut`,
+                        color: `#ffffff`,
+                        run: (self) => {
+                            // https://wiki.archlinux.org/title/desktop_entries
+                            // https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#recognized-keys
+                            var lines = [
+                                `[Desktop Entry]`,
+                                `Version=1.5`,
+                                `Name=${package.name}`, // required
+                                `Path=${__dirname}`,
+                                `Type=Application`, // required
+                                `Terminal=true`,
+                                `Exec=${process.argv.join(` `)}`,
+                                `Comment=${package.description.replace(/\n/g, ` `)}`,
+                                `Icon=/home/${os.userInfo().username}/.local/share/applications/creaper.png`,
+                            ];
+                            fs.writeFileSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`, lines.join(`\n`));
+                            fs.copySync(`${__dirname}/creaper.png`, `/home/${os.userInfo().username}/.local/share/applications/creaper.png`);
+                            consolelog(`Shortcut added`);
+                        },
+                        hidden: () => os.platform() == `linux` && !fs.existsSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`),
+                    },
+                    {
                         name: `debug`,
                         color: `#00ff00`,
                         run: (self) => {
@@ -2391,29 +2414,6 @@ if (module.parent) return; // required as a module
                                         selectedMenu = varsMenu;
                                         selected = 0;
                                     },
-                                },
-                                {
-                                    name: `add desktop shortcut`,
-                                    color: `#ffffff`,
-                                    run: (self) => {
-                                        // https://wiki.archlinux.org/title/desktop_entries
-                                        // https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#recognized-keys
-                                        var lines = [
-                                            `[Desktop Entry]`,
-                                            `Version=1.5`,
-                                            `Name=${package.name}`, // required
-                                            `Path=${__dirname}`,
-                                            `Type=Application`, // required
-                                            `Terminal=true`,
-                                            `Exec=${process.argv.join(` `)}`,
-                                            `Comment=${package.description.replace(/\n/g, ` `)}`,
-                                            `Icon=/home/${os.userInfo().username}/.local/share/applications/creaper.png`,
-                                        ];
-                                        fs.writeFileSync(`/home/${os.userInfo().username}/.local/share/applications/${package.name}.desktop`, lines.join(`\n`));
-                                        fs.copySync(`${__dirname}/creaper.png`,`/home/${os.userInfo().username}/.local/share/applications/creaper.png`);
-                                        consolelog(`Shortcut added`);
-                                    },
-                                    hidden: () => os.platform() == `linux`,
                                 },
                             ];
                             selectedMenu = debugMenu;
