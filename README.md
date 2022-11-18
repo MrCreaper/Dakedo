@@ -4,10 +4,13 @@ A compiler that runs and is nice
 
 ## UI
 
-Move with `up` / `w` and `down` / `s`, `left` / `a` and `right` / `d` to move logs and `enter` / `return` / `space` to select.
-`tab` to go to "logMode", which just hides the options and lets you focus on the logs.
-
-p.s `ctrl+c` = abort. So please use `q` or the quit option.
+- `up` / `w` and `down` / `s` to move
+- `enter` / `return` / `space` to select
+- `left` / `a` and `right` / `d` to move logs
+- `tab` to go to "logMode", which just hides the options and lets you focus on the logs
+- `q` to quit normally
+- `ctrl+c` is abort. *Except in "input mode"
+- `backspace` sends you "back" in sub-menues
 
 ## Config
 
@@ -38,6 +41,7 @@ var config = {
         },
         logConfig: false, // only on cmd version
         staticColor: true, // color mod names
+        addToTitle: false, // might couse Error sound effect
     },
     startDRG: false, // when cooked
     killDRG: true, // when starting cook
@@ -63,6 +67,7 @@ var config = {
     },
     modio: {
         token: "", // https://mod.io/me/access > oauth access
+        apikey: "", // https://mod.io/me/access > API Access | api key for some commands
         gameid: 2475, // DRG
         modid: 0, // aka "Resource ID"
         onCompile: false, // upload on compile
@@ -71,6 +76,7 @@ var config = {
         msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
         xm: true, // use am/pm or 24h
         updateCache: true, // update cache for the mod, no download's needed!
+        changelog: false, // Ask for changelogs on publishing?
         cache: "", // auto generated
     },
     presets: {
@@ -118,31 +124,31 @@ var codeShortcut = {
 
 ### Shortcut functions
 
-- cook (cooks and packs)
-- publish (uploads current build of mod in the mods folder)
-- backup (backups)
-- refreshDirsToNeverCook (Refreshes ./Config/DefaultGame.ini > DirectoriesToNeverCook list)
+- `cook` cooks and packs
+- `publish` uploads current build of mod in the mods folder
+- `backup` backups
+- `refreshDirsToNeverCook` Refreshes ./Config/DefaultGame.ini > DirectoriesToNeverCook list
 
 ## Compiler Options
 
 If you are too cool for the UI you can use options. Using any options disables ui.
 Default is cooking.
 
-- `{mod name}` (just adding a mod name will set it as the ModName for the compile)
-- `{pak file}` (adding path to the pak file will decompile it or if you are using the release you can just drag the file on it)
-- `-verify` (verifies settings, prob)
-- `-drg` (toggles startDRG)
-- `-bu` (backups)
-- `-lbu{id}` (loads backup, exclude id to unload backup) (NOTE: dose not load all of "full" backups)
-- `-listbu` (lists backups)
-- `-unpackdrg` (unpacks drg)
-- `-publish` (publishes version to modio)
-- `-export` (uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else)
-- `-exportFlat` (same as above but flattens textures to a single folder)
+- `{mod name}` just adding a mod name will set it as the ModName for the compile
+- `{pak file}` adding path to the pak file will decompile it or if you are using the release you can just drag the file on it
+- `-verify` verifies settings, prob
+- `-drg` toggles startDRG
+- `-bu` backups
+- `-lbu{id}` loads backup, exclude id to unload backup) (NOTE: dose not load all of "full" backups
+- `-listbu` lists backups
+- `-unpackdrg` unpacks drg
+- `-publish` publishes version to modio
+- `-export` uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else
+- `-exportFlat` same as above but flattens textures to a single folder
 
 ## Install
 
-Make the folder hieracy something like this (or u know edit the config ¯\\\_(ツ)\_/¯)
+Make the folder hieracy something like this (or u know edit the [config](#config) ¯\\\_(ツ)\_/¯)
 
 - FSD
   - FSD.uproject
@@ -156,17 +162,9 @@ Build with `npm run pkg`
 
 [umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
 
-Also if you oh so wish, I have exposed some of the functions.
-So you can just do
-
-```js
-var compiler = require('./compile.js');
-compiler.cook(); // or something
-```
-
 and mess around.
 
 ### Why "compiler"?
 
-Originally it was just a script to run the cook command so it was (and still is) called `compile.js`.
+Originally it was just a script to run the cook command, so it was (and still is) called `compile.js`.
 But calling it "drg-modding-hub" sounds a bit too much like mod-hub, which is cringe.
