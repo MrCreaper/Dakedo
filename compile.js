@@ -332,6 +332,7 @@
         ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
         ProjectFile: "/../FSD.uproject", // also general folder
         DirsToCook: [], // folder named after ModName is automaticlly included
+        DirsToNeverCook: [], // example: CoolMod/debug
         UnrealEngine: "", // auto generated
         drg: "", // auto generated
         cmds: {
@@ -371,6 +372,7 @@
             pak: false,
             blacklist: [".git"],
             all: false, // backup the entire project by default
+            verifacation: false,
         },
         zip: {
             onCompile: true, // placed in the mods/{mod name} folder
@@ -612,6 +614,9 @@
         if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
         if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
         if (!fs.existsSync(config.drg)) return consolelog(`Couldnt find drg\nPath: ${config.drg}`);
+        config.DirsToNeverCook.forEach(x => {
+            if (!fs.existsSync(`${ProjectPath}Content/${x}`)) return consolelog(`"DirsToNeverCook" Directory dosent exist.\n${x}`);
+        });
 
         if (config.logging.external)
             config.logging.external.forEach(ext => {
@@ -1134,6 +1139,7 @@
                     size: await dirSize(buf),
                     full: full,
                     modname: config.ModName,
+                    verified: config.backup.verifacation ? await getInput(`Backup verifacation; input "y" to verify`) == `y` : undefined,
                     meta: meta,
                 });
 
@@ -1279,6 +1285,7 @@
                     dirs.push(`${dir}${x}`);
             });
         }
+        dirs = dirs.concat(config.DirsToNeverCook);
         dirs.forEach(x => {
             if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
                 read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
@@ -1842,6 +1849,8 @@
                         name = `${chalk.cyan(info.id)} - ${info.full ?
                             chalk.yellow(info.modname ? info.modname : `[full]`) :
                             info.modname ? staticCText(info.modname) : chalk.gray(`[empty]`)} - ${since(new Date(new Date().toUTCString()) - new Date(info.date))} - ${chalk.cyan(humanFileSize(info.size, true, 0).toLowerCase().replace(` `, ``))}`;
+                        if (info.verified)
+                            name += `${info.verified ? chalk.greenBright(` ✓`) : ``}`
                     }
                     listBackupOptions.push({
                         name: name, // I could make this dyn() but think that would be a bit ineffecient
@@ -2480,7 +2489,7 @@
                                     name: `echo`,
                                     color: `#ffffff`,
                                     run: async (self) => {
-                                        consolelog(await getInput(`Debug input:`));
+                                        consolelog(await getInput(`echo:`));
                                     }
                                 },
                                 {
