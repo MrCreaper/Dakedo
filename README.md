@@ -20,6 +20,7 @@ var config = {
     ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
     ProjectFile: "/../FSD.uproject", // also general folder
     DirsToCook: [], // folder named after ModName is automaticlly included
+    DirsToNeverCook: [], // example: CoolMod/debug
     UnrealEngine: "", // auto generated
     drg: "", // auto generated
     cmds: {
@@ -35,12 +36,12 @@ var config = {
             misc: true, // cleans up paths, and a few more
             prefixes: true, // Removes Log{something}:
             removeWarnings: true, // Remove lines containing "Warning: "
+            removeMismatches: true, // remove "Mismatch size for type " since usually it dosent matter.
             removeOther: false, // Remove everything that isnt super important (use with caution)
             clearOnCook: true, // clear logs before cooking
             clearOnNewSession: true, // clear logs when started
         },
         logConfig: false, // only on cmd version
-        staticColor: true, // color mod names
         addToTitle: false, // might couse Error sound effect
     },
     startDRG: false, // when cooked
@@ -51,14 +52,19 @@ var config = {
         cleanSelected: false, // clean logs only between selection arrows
         shortcuts: [],
         selectArrows: true,
+        color: "00ffff", // The shown color for this mod/preset
+        bgColor: false, // Mod name color shown as background
+        staticColor: true, // color mod names
     },
     backup: {
         folder: "./backups", // leave empty for no backups
         onCompile: true,
-        max: 5, // Maximum backups for each mod. -1 for infinite
+        max: 5, // -1 for infinite
+        maxTotal: false, // false = Maximum backups for each mod. true = total backups. For the above value
         pak: false,
         blacklist: [".git"],
         all: false, // backup the entire project by default
+        verifacation: false,
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
@@ -83,7 +89,10 @@ var config = {
         "release": {
             modio: {
                 modid: 1,
-            }
+            },
+            ui: {
+                color: "00ffff",
+            },
         },
         "mod^2": {
             ModName: `mod2`,
@@ -145,6 +154,12 @@ Default is cooking.
 - `-publish` publishes version to modio
 - `-export` uses [umodel](https://github.com/gildor2/UEViewer) to export textures, and nothing else
 - `-exportFlat` same as above but flattens textures to a single folder
+
+### About updating
+
+When "updating (unpack)" it wipes all the folders that are included in the unpack.
+To avoid your mod gettings wiped, we search through the config and presets and dont update folders that are in use.
+Its not a constant worry but its good to keep it in mind.
 
 ## Install
 

@@ -1,3 +1,95 @@
+var config = {
+    ProjectName: "FSD",
+    ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
+    ProjectFile: "/../FSD.uproject", // also general folder
+    DirsToCook: [], // folder named after ModName is automaticlly included
+    DirsToNeverCook: [], // example: CoolMod/debug
+    UnrealEngine: "", // auto generated
+    drg: "", // auto generated
+    cmds: {
+        Cooking: "", // auto generated DONT FUCKING USE -Compressed
+        Packing: "", // auto generated
+        UnPacking: "", // auto generated
+        CompileAll: "", // auto generated
+    },
+    logging: {
+        file: "./logs.txt", // empty for no logs
+        external: [], // show new logs from another file
+        cleaning: {
+            misc: true, // cleans up paths, and a few more
+            prefixes: true, // Removes Log{something}:
+            removeWarnings: true, // Remove lines containing "Warning: "
+            removeMismatches: true, // remove "Mismatch size for type " since usually it dosent matter.
+            removeOther: false, // Remove everything that isnt super important (use with caution)
+            clearOnCook: true, // clear logs before cooking
+            clearOnNewSession: true, // clear logs when started
+        },
+        logConfig: false, // only on cmd version
+        addToTitle: false, // might couse Error sound effect
+    },
+    startDRG: false, // when cooked
+    killDRG: true, // when starting cook
+    ui: {
+        enabled: true,  // use the ui version by default
+        cleanBox: true, // clean logs around the options
+        cleanSelected: false, // clean logs only between selection arrows
+        shortcuts: [],
+        selectArrows: true,
+        color: "00ffff", // The shown color for this mod/preset
+        bgColor: false, // Mod name color shown as background
+        staticColor: true, // color mod names
+    },
+    backup: {
+        folder: "./backups", // leave empty for no backups
+        onCompile: true,
+        max: 20, // -1 for infinite
+        maxTotal: false, // false = Maximum backups for each mod. true = total backups. For the above value
+        pak: false,
+        blacklist: [".git"],
+        all: false, // backup the entire project by default
+        verifacation: false, // verified backups arent deleted
+    },
+    zip: {
+        onCompile: true, // placed in the mods/{mod name} folder
+        backups: false,
+        to: [], // folders to copy the zip in.
+    },
+    modio: {
+        token: "", // https://mod.io/me/access > oauth access
+        apikey: "", // https://mod.io/me/access > API Access | api key for some commands
+        gameid: 2475, // DRG
+        modid: 0, // aka "Resource ID"
+        onCompile: false, // upload on compile
+        deleteOther: true, // deletes older or non-active files
+        dateVersion: true, // make version from the date year.month.date, otherwise get version from project
+        msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
+        xm: true, // use am/pm or 24h
+        updateCache: true, // update cache for the mod, no download's needed!
+        changelog: false, // Ask for changelogs on publishing?
+        cache: "", // auto generated
+    },
+    presets: {
+        "release": {
+            modio: {
+                modid: 1,
+                changelog: true,
+            },
+            ui: {
+                color: "00ffff",
+            },
+        },
+        "mod^2": {
+            ModName: `mod2`,
+            modio: {
+                modid: 2,
+            }
+        },
+    },
+    forceCookByDefault: false, // force cook just ignores errors and tries to pack.
+    update: true, // automaticlly update
+};
+// This is up here just so I could copy it to the readme easier
+
 (async () => {
     const fs = require('fs-extra');
     const child = require(`child_process`);
@@ -318,7 +410,17 @@
     }
 
     function staticCText(str) { // static colored text
-        if (!config.logging.staticColor) return chalk.cyan(str);
+        if (!config.ui.staticColor) return chalk.cyan(str);
+        if (config.ModName == str)
+            var preset = config;
+        else
+            var preset = Object.values(config.presets).find(x => x.ModName == str);
+        if (preset && preset.ui && preset.ui.color)
+            return (
+                preset.ui.bgColor ?
+                    chalk.bgHex(`#${preset.ui.color}`) :
+                    chalk.hex(`#${preset.ui.color}`)
+            )(str);
         return chalk.bgHex(`#${crypto.createHash('md5').update(str).digest('hex').slice(0, 5)}`)(str)
     }
 
@@ -326,89 +428,6 @@
         return child.spawnSync(`users`).output[1].toString().replace(/\\n/g, ``);
     }
     var utcNow = new Date(new Date().toUTCString());
-
-    var config = {
-        ProjectName: "FSD",
-        ModName: "", // auto found | also can be a path like "_CoolGuy/CoolMod"
-        ProjectFile: "/../FSD.uproject", // also general folder
-        DirsToCook: [], // folder named after ModName is automaticlly included
-        DirsToNeverCook: [], // example: CoolMod/debug
-        UnrealEngine: "", // auto generated
-        drg: "", // auto generated
-        cmds: {
-            Cooking: "", // auto generated DONT FUCKING USE -Compressed
-            Packing: "", // auto generated
-            UnPacking: "", // auto generated
-            CompileAll: "", // auto generated
-        },
-        logging: {
-            file: "./logs.txt", // empty for no logs
-            external: [], // show new logs from another file
-            cleaning: {
-                misc: true, // cleans up paths, and a few more
-                prefixes: true, // Removes Log{something}:
-                removeWarnings: true, // Remove lines containing "Warning: "
-                removeOther: false, // Remove everything that isnt super important (use with caution)
-                clearOnCook: true, // clear logs before cooking
-                clearOnNewSession: true, // clear logs when started
-            },
-            logConfig: false, // only on cmd version
-            staticColor: true, // color mod names
-            addToTitle: false, // might couse Error sound effect
-        },
-        startDRG: false, // when cooked
-        killDRG: true, // when starting cook
-        ui: {
-            enabled: true,  // use the ui version by default
-            cleanBox: true, // clean logs around the options
-            cleanSelected: false, // clean logs only between selection arrows
-            shortcuts: [],
-            selectArrows: true,
-        },
-        backup: {
-            folder: "./backups", // leave empty for no backups
-            onCompile: true,
-            max: 5, // Maximum backups for each mod. -1 for infinite
-            pak: false,
-            blacklist: [".git"],
-            all: false, // backup the entire project by default
-            verifacation: false,
-        },
-        zip: {
-            onCompile: true, // placed in the mods/{mod name} folder
-            backups: false,
-            to: [], // folders to copy the zip in.
-        },
-        modio: {
-            token: "", // https://mod.io/me/access > oauth access
-            apikey: "", // https://mod.io/me/access > API Access | api key for some commands
-            gameid: 2475, // DRG
-            modid: 0, // aka "Resource ID"
-            onCompile: false, // upload on compile
-            deleteOther: true, // deletes older or non-active files
-            dateVersion: true, // make version from the date year.month.date, otherwise get version from project
-            msPatch: true, // adds ms to the end of the dateVersion. Less prefered then default (applied when deleteOther=false).
-            xm: true, // use am/pm or 24h
-            updateCache: true, // update cache for the mod, no download's needed!
-            changelog: false, // Ask for changelogs on publishing?
-            cache: "", // auto generated
-        },
-        presets: {
-            "release": {
-                modio: {
-                    modid: 1,
-                }
-            },
-            "mod^2": {
-                ModName: `mod2`,
-                modio: {
-                    modid: 2,
-                }
-            },
-        },
-        forceCookByDefault: false, // force cook just ignores errors and tries to pack.
-        update: true, // automaticlly update
-    };
 
     var selectedPresetKey = ``;
 
@@ -520,25 +539,27 @@
 
     var unVaredConfig = JSON.parse(JSON.stringify(config)); // makes new instance of config
     //if (!runningRoot) // I dont remember why this is here
-    if (updateConfig() != true) exitHandler();
+    if (await updateConfig() != true) exitHandler();
     fs.watchFile(configPath, async (curr, prev) => {
         if (curr.size == prev.size) return;
-        updateConfig();
+        updateConfig(undefined, undefined, false);
         setPreset();
         consolelog(chalk.gray(`Updated config`));
     });
-    async function updateConfig(readFromFile = true, updateFile = true) {
+    async function updateConfig(readFromFile = true, updateFile = true, crashable = true) {
         if (!fs.existsSync(configPath)) {
-            console.log(`Wrote config.`);
             writeConfig();
-            return exitHandler();
+            console.log(`Wrote config.`);
+            exitHandler();
+            return;
         }
         if (readFromFile) {
             var tempconfig = fs.readFileSync(configPath);
             if (!isJsonString(tempconfig)) {
                 //writeConfig(config);
                 consolelog("Config is an invalid json, please check it again.");
-                return exitHandler();
+                if (crashable) exitHandler();
+                return;
             }
             tempconfig = JSON.parse(tempconfig);
             config = checkConfig(config, tempconfig);
@@ -610,7 +631,6 @@
         }
 
         // config ready, verify
-        if (!fs.existsSync(`${ProjectPath}Content/${config.ModName}`) && !process.argv.find(x => x.includes(`-lbu`))) return consolelog(`Your mod couldnt be found, ModName should be the same as in the content folder.`);
         if (!fs.existsSync(`${__dirname}${config.ProjectFile}`)) return consolelog(`Couldnt find project file`);
         if (!fs.existsSync(config.UnrealEngine)) return consolelog(`Couldnt find ue4\nPath: ${config.UnrealEngine}`);
         if (!fs.existsSync(config.drg)) return consolelog(`Couldnt find drg\nPath: ${config.drg}`);
@@ -1173,21 +1193,10 @@
                         if (aid < bid) return -1;
                         if (aid > bid) return 1;
                         return 0;
+                    }).filter(x => {
+                        return !fs.readJsonSync(`${config.backup.folder}/${x}/${backupInfo}`).verified; // keep? | Dont want to do anything to verified backups
                     }); // oldest => newest
-                    var backupsForMods = {};
-                    backups.forEach(x => {
-                        function wipe() {
-                            fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
-                        }
-                        if (!fs.existsSync(`${config.backup.folder}/${x}/${backupInfo}`)) return wipe()
-                        var info = fs.readFileSync(`${config.backup.folder}/${x}/${backupInfo}`);
-                        if (!isJsonString(info)) return wipe();
-                        info = JSON.parse(info);
-                        if (!info.modname) return wipe();
-                        if (!backupsForMods[info.modname]) backupsForMods[info.modname] = [];
-                        backupsForMods[info.modname].push(x);
-                    });
-                    Object.values(backupsForMods).forEach(backups => {
+                    if (config.backup.maxTotal) {
                         backups.forEach((x, i) => {
                             //if(i == 0) return; // keep oldest as a keepsake
                             if (backups.length - i - 1 > config.backup.max) {
@@ -1196,7 +1205,31 @@
                                 //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
                             }
                         });
-                    });
+                    } else {
+                        var backupsForMods = {};
+                        backups.forEach(x => {
+                            function wipe() {
+                                fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
+                            }
+                            if (!fs.existsSync(`${config.backup.folder}/${x}/${backupInfo}`)) return wipe()
+                            var info = fs.readFileSync(`${config.backup.folder}/${x}/${backupInfo}`);
+                            if (!isJsonString(info)) return wipe();
+                            info = JSON.parse(info);
+                            if (!info.modname) return wipe();
+                            if (!backupsForMods[info.modname]) backupsForMods[info.modname] = [];
+                            backupsForMods[info.modname].push(x);
+                        });
+                        Object.values(backupsForMods).forEach(backups => {
+                            backups.forEach((x, i) => {
+                                //if(i == 0) return; // keep oldest as a keepsake
+                                if (backups.length - i - 1 > config.backup.max) {
+                                    //var l = consolelog(`Deleting old backup ${chalk.red(x)}`);
+                                    fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
+                                    //consolelog(chalk.gray(`Deleted old backup ${chalk.red(x.replace(/(\r\n|\n|\r)/gm, ""))}`), undefined, undefined, undefined, l);
+                                }
+                            });
+                        });
+                    }
                 }
 
                 consolelog(`Backup done! id: ${chalk.cyan(id)}`, undefined, undefined, undefined, log);
@@ -1595,15 +1628,48 @@
                 ];
             }
             // :)
-            await backup(true);
+            //await backup(true);
             // update folders
             var done = 0;
             var updateList = [];
             Object.keys(updates).forEach(key => {
                 updates[key].forEach(x => {
-                    updateList.push([`${key}${x}`, `${ProjectPath}${x}`]);
+                    updateList.push([`${key}${x}`, `${ProjectPath}${x}`, x]);
                 });
             });
+            // Remove folders that include mod files
+            var modFolders = []; // I dont think "never cook" actually reads files.. I guess I could remove them for the cook and restore them? | All are in Content/
+            Object.values(config.presets).concat(config).forEach(x => {
+                if (x.ModName)
+                    modFolders.push(x.ModName);
+                if (x.DirsToCook)
+                    x.DirsToCook.forEach(y => {
+                        modFolders.push(y);
+                    });
+            });
+            var cleanUpdateList = [];
+            consolelog(modFolders);
+            updateList.forEach(x => {
+                if (!x[2].includes(`Content/`)) return cleanUpdateList.push(x);
+                var p = x[2].replace(`Content/`, ``);
+                var pile = [];
+                for (var i = 0; i < p.split(`/`).length; i++) {
+                    pile.push(p.split(`/`)[i]);
+                    var pil = pile.join(`/`);
+                    if (modFolders.find(x => x.includes(pil))) {
+                        consolelog(pil);
+                    }
+                }
+
+                function splitFolder(folder) {
+                    var out = [];
+                    fs.readdirSync(folder).forEach(x => {
+                        out.push(`${folder}/${x}`);
+                    });
+                    return out;
+                }
+            });
+            return;
             for (var i = 0; i < updateList.length; i++) {
                 var source = updateList[i][0];
                 var dest = updateList[i][1];
@@ -1741,14 +1807,15 @@
     }
     async function exitHandler(err) {
         if (fs.existsSync(`${__dirname}/.temp/`) && process.pkg) fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
-        if (!Array.isArray(children)) return console.log(children);
-        children.forEach(x => {
-            if (!x.kill)
-                console.log(`This isnt a fucking child!`);
-            else
-                x.kill();
-            children.splice(children.findIndex(x => x == x), 1);
-        });
+        if (!Array.isArray(children)) console.log(children);
+        else
+            children.forEach(x => {
+                if (!x.kill)
+                    console.log(`This isnt a fucking child!`);
+                else
+                    x.kill();
+                children.splice(children.findIndex(x => x == x), 1);
+            });
         if (err && err != `SIGINT` && err.name && err.message) console.log(err);
         if (process.pkg && err != true) await keypress();
         process.exit();
@@ -1846,9 +1913,7 @@
                         info = JSON.parse(info);
                         if (info.size)
                             totalSize += info.size;
-                        name = `${chalk.cyan(info.id)} - ${info.full ?
-                            chalk.yellow(info.modname ? info.modname : `[full]`) :
-                            info.modname ? staticCText(info.modname) : chalk.gray(`[empty]`)} - ${since(new Date(new Date().toUTCString()) - new Date(info.date))} - ${chalk.cyan(humanFileSize(info.size, true, 0).toLowerCase().replace(` `, ``))}`;
+                        name = `${info.full ? chalk.yellowBright(info.id) : chalk.cyan(info.id)} - ${info.modname ? staticCText(info.modname) : chalk.gray(`[empty]`)} - ${since(new Date(new Date().toUTCString()) - new Date(info.date))} - ${chalk.cyan(humanFileSize(info.size, true, 0).toLowerCase().replace(` `, ``))}`;
                         if (info.verified)
                             name += `${info.verified ? chalk.greenBright(` ✓`) : ``}`
                     }
@@ -2185,12 +2250,15 @@
                                 },
                             ];
                             Object.keys(config.presets).forEach(key => {
+                                var preset = config.presets[key];
+                                if (preset.ui && preset.ui.bgColor)
+                                    var keyC = chalk.bgHex(preset.ui && preset.ui.color ? preset.ui.color : `ffffff`)(key);
+                                else
+                                    var keyC = chalk.hex(preset.ui && preset.ui.color ? preset.ui.color : `ffffff`)(key);
                                 presetMenu.push(
                                     {
-                                        name: () => selectedPresetKey == key ? `> ${key} <` : key,
-                                        run: () => {
-                                            setPreset(key);
-                                        },
+                                        name: () => selectedPresetKey == key ? `> ${keyC} <` : keyC,
+                                        run: () => setPreset(key),
                                     }
                                 );
                             });
@@ -3123,6 +3191,13 @@
                             .split(`\n`)
                             .filter(x => {
                                 return !x.includes(`Warning: `); // keep?
+                            })
+                            .join(`\n`);
+                    if (c.removeMismatches)
+                        d = d
+                            .split(`\n`)
+                            .filter(x => {
+                                return !x.includes(`Mismatch size for type `); // keep?
                             })
                             .join(`\n`);
                     const miscPrefixes = [
