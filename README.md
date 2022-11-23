@@ -1,6 +1,6 @@
-# DRG Modding Compiler
+# Dakedo
 
-A compiler that runs and is nice
+A all-in-one for everything needed to make DRG mods and more
 
 ## UI
 
@@ -167,9 +167,9 @@ Make the folder hieracy something like this (or u know edit the [config](#config
 
 - FSD
   - FSD.uproject
-    - compiler
-      - [compiler.exe](https://github.com/MrCreaper/drg-modding-compiler/releases/latest)
-      - [config.json](#config) (generated on first run)
+  - compiler
+    - [compiler.exe](https://github.com/MrCreaper/dakedo/releases/latest)
+    - [config.json](#config) (generated on first run)
 
 ### Development
 
@@ -178,8 +178,3 @@ Build with `npm run pkg`
 [umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
 
 and mess around.
-
-### Why "compiler"?
-
-Originally it was just a script to run the cook command, so it was (and still is) called `compile.js`.
-But calling it "drg-modding-hub" sounds a bit too much like mod-hub, which is cringe.

@@ -433,7 +433,6 @@ var config = {
 
     __dirname = PATH.dirname(process.pkg ? process.execPath : (require.main ? require.main.filename : process.argv[0])); // fix pkg dirname
     const ProjectPath = PATH.resolve(`${__dirname}${config.ProjectFile}`).replace(PATH.basename(config.ProjectFile), ``);
-    const W__dirname = `Z:/${__dirname}`.replace(`//`, `/`); // we are Z, they are C. for wine (dirname dosent end with /)
 
     var username = os.userInfo().username;
 
@@ -451,6 +450,7 @@ var config = {
                 Cooking: `{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTimes -iterate`,
                 Packing: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
+                UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract {path} {outpath} -unattended -NoLogTimes`,
             },
             modio: {
                 cache: `C:\\users\\Public\\mod.io\\2475\\`,
@@ -463,6 +463,7 @@ var config = {
                 Cooking: `{UnrealEngine}/Engine/Binaries/Linux/UE4Editor-Cmd {dir}{pf} -run=cook -targetplatform=WindowsNoEditor -unattended -NoLogTime -iterates`,
                 Packing: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt"`,
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Linux/UnrealPak -platform="Windows" -extract "{path}" "{outpath}"`,
+                UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract {path} {outpath} -unattended -NoLogTimes`,
             },
             modio: {
                 cache: `/home/{me}/.local/share/Steam/steamapps/compatdata/548430/pfx/drive_c/users/Public/mod.io/2475/`,
@@ -487,6 +488,7 @@ var config = {
             cmds: {
                 Cooking: `no idea`,
                 Packing: `no idea`,
+                UnPacking: `no idea`,
                 UnPacking: `no idea`,
             },
             modio: {
@@ -531,7 +533,8 @@ var config = {
     }
 
     const wine = fs.existsSync(originalplatformPaths.linuxwine.UnrealEngine.replace(/{me}/g, username));
-    const platform = `${os.platform().replace(/[3264]/g, ``).replace(`Darwin`, `macos`)}${wine ? `wine` : ``}`;
+    const W__dirname = wine ? `Z:/${__dirname}`.replace(`//`, `/`) : __dirname; // we are Z, they are C. for wine (dirname dosent end with /)
+    const platform = `${os.platform().toLowerCase().replace(/[0-9]/g, '').replace(`darwin`, `macos`)}${wine ? `wine` : ``}`;
     var paths = updatePlatPathVariables(platformPaths[platform]);
     if (!paths) paths = platformPaths.givenUpos;
 
@@ -1125,6 +1128,7 @@ var config = {
 
                 // actually start backuping
                 var buf = `${config.backup.folder}/${id} - ${new Date(new Date().toUTCString()).toISOString().replace(/T/, ' ').replace(/\..+/, '')}`; // BackUp Folder
+                if (platform == `win`) buf = buf.replace(/[/\\?%*:|"<>]/g, '-');
                 fs.mkdirsSync(buf);
                 // full backup
                 if (full) {
@@ -1194,7 +1198,8 @@ var config = {
                         if (aid > bid) return 1;
                         return 0;
                     }).filter(x => {
-                        return !fs.readJsonSync(`${config.backup.folder}/${x}/${backupInfo}`).verified; // keep? | Dont want to do anything to verified backups
+                        if (!fs.existsSync(`${config.backup.folder}/${x}/${backupInfo}`)) return true;
+                        return !fs.readJsonSync(`${config.backup.folder}/${x}/${backupInfo}`).verified; // keep?/Can delete? | Dont want to do anything to verified backups
                     }); // oldest => newest
                     if (config.backup.maxTotal) {
                         backups.forEach((x, i) => {
@@ -1477,8 +1482,8 @@ var config = {
             if (resp.draft) return r();//r(consolelog(chalk.gray(`Not downloading draft update`)));
             if (resp.prerelease && !pre) return r();//r(consolelog(`Not downloading prerelease update`));
             if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`)));
-            const asset = resp.assets.find(x => x.name.includes(os.platform()));
-            if (!asset) return r(consolelog(`No compatible update download found.. (${os.platform()})`));
+            const asset = resp.assets.find(x => x.name.includes(platform));
+            if (!asset) return r(consolelog(`No compatible update download found.. (${platform})`));
             var filePath = process.argv[0];
             if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
             var log = consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
@@ -1647,29 +1652,41 @@ var config = {
                         modFolders.push(y);
                     });
             });
-            var cleanUpdateList = [];
-            consolelog(modFolders);
-            updateList.forEach(x => {
-                if (!x[2].includes(`Content/`)) return cleanUpdateList.push(x);
-                var p = x[2].replace(`Content/`, ``);
-                var pile = [];
-                for (var i = 0; i < p.split(`/`).length; i++) {
-                    pile.push(p.split(`/`)[i]);
-                    var pil = pile.join(`/`);
-                    if (modFolders.find(x => x.includes(pil))) {
-                        consolelog(pil);
-                    }
-                }
+            function cleanUpdateList(updateList = []) {
+                var cleanUpdateList = [];
+                updateList.forEach(x => {
+                    if (!x[2].includes(`Content/`)) return cleanUpdateList.push(x);
+                    var p = x[2].replace(`Content/`, ``);
+                    runFolder(p);
+                    function runFolder(p) {
+                        var pile = modFolders.find(x => x.startsWith(p));
+                        if (pile) {
+                            // p = current folder in the modfile
+                            var c = `${p}/${pile.replace(`${p}/`, ``).split(`/`)[0]}`; // next folder in the modfile
+                            var b = `${x[0].replace(x[2], ``)}Content/${c}`;
+                            consolelog(p);
+                            consolelog(pile);
+                            if (p == pile) return;
+                            consolelog(c);
+                            consolelog(b);
+                            var newList = fs.readdirSync(b)
+                                .filter(x => x != pile.replace(`${p}/`, ``).split(`/`)[1])
+                                .map(y => [
+                                    `${b}/${y}`, // source
+                                    `${ProjectPath}Content/${c}/${y}`, // dest (project)
+                                ]);
 
-                function splitFolder(folder) {
-                    var out = [];
-                    fs.readdirSync(folder).forEach(x => {
-                        out.push(`${folder}/${x}`);
-                    });
-                    return out;
-                }
-            });
-            return;
+                            cleanUpdateList = cleanUpdateList.concat(newList);
+                            consolelog(`---------------------`);
+                            runFolder(c);
+                        }
+                    }
+                });
+                return cleanUpdateList;
+            }
+            //updateList = cleanUpdateList(updateList);
+            //consolelog(updateList);
+            //return;
             for (var i = 0; i < updateList.length; i++) {
                 var source = updateList[i][0];
                 var dest = updateList[i][1];
@@ -1802,22 +1819,29 @@ var config = {
     var children = [];
     if (fs.existsSync(`${__dirname}/.temp/`)) { // remove temp folder if exitHandler failed
         console.log(`Clearing "temp" for some reason.`);
-        fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
+        fs.rm(`${__dirname}/.temp/`, { recursive: true, force: true }); // sync just takes a while
         console.log(`Cleared!`);
     }
+    var exiting = false;
     async function exitHandler(err) {
         if (fs.existsSync(`${__dirname}/.temp/`) && process.pkg) fs.rmSync(`${__dirname}/.temp/`, { recursive: true, force: true });
-        if (!Array.isArray(children)) console.log(children);
-        else
-            children.forEach(x => {
-                if (!x.kill)
-                    console.log(`This isnt a fucking child!`);
-                else
-                    x.kill();
-                children.splice(children.findIndex(x => x == x), 1);
-            });
+        if (children)
+            if (!Array.isArray(children))
+                consolelog(children);
+            else
+                children.forEach(x => {
+                    if (!x.kill)
+                        console.log(`This isnt a fucking child!`);
+                    else
+                        x.kill();
+                    children.splice(children.findIndex(x => x == x), 1);
+                });
         if (err && err != `SIGINT` && err.name && err.message) console.log(err);
-        if (process.pkg && err != true) await keypress();
+        if (process.pkg && err != true) {
+            if (exiting) return consolelog(`[ Press any key to exit ]`);
+            exiting = true;
+            await keypress();
+        }
         process.exit();
     }
     process.on('exit', exitHandler);
@@ -2267,11 +2291,13 @@ var config = {
                         },
                     },
                     { // feels like a bit too in-your-face, but its in the misc menu so its not THAT in-your-face
-                        name: `make template`,
+                        name: `make mod`,
                         color: `#ff8c00`,
-                        run: () => {
-                            fs.copy(`${ProjectPath}Content/Toucan/template`, `${ProjectPath}Content/template`);
-                            consolelog(`Made template`);
+                        run: async () => {
+                            var modName = await getInput(`New mod name:`);
+                            fs.copySync(`${ProjectPath}Content/Toucan/template`, `${ProjectPath}Content/${modName}`);
+                            fs.renameSync(`${ProjectPath}Content/${modName}/templateMain.uasset`, `${ProjectPath}Content/${modName}/${modName}Main.uasset`);
+                            consolelog(`Made mod "${modName}"`);
                         },
                         hidden: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
                     },
@@ -2641,7 +2667,7 @@ var config = {
                         for (var i = 0; i < runlist.length; i++) {
                             var runName = runlist[i];
                             var run = module.exports[runName]; // globalThis
-                            if (!run) return consolelog(chalk.redBright(`Invalid function "${runName}" in "${x.name}" (index:${index}).\nCheck the readme for a list of commands\nhttps://github.com/MrCreaper/drg-modding-compiler#Shortcut-functions`));
+                            if (!run) return consolelog(chalk.redBright(`Invalid function "${runName}" in "${x.name}" (index:${index}).\nCheck the readme for a list of commands\nhttps://github.com/MrCreaper/dakedo#Shortcut-functions`));
                             await run();
                         }
                         r();
@@ -2698,7 +2724,8 @@ var config = {
             //consolelog(k);
             if (isGettingInput) {
                 if (key.ctrl && key.sequence == `c`) return inputDone(true);
-                if (key.name == `return` || (inputReturnAt != -1 && inputCache.length >= inputReturnAt)) return inputDone();
+                // return cant be "shifted"
+                if ((key.name == `return` && !key.shift) || (inputReturnAt != -1 && inputCache.length >= inputReturnAt)) return inputDone();
                 if (key.name == `backspace`) {
                     inputCache = inputCache.slice(0, inputCache.length - 1);
                     draw();
@@ -3053,7 +3080,7 @@ var config = {
             }
             fs.mkdirSync(`${__dirname}/.temp/`);
             fs.writeFileSync(`${__dirname}/.temp/Input.txt`, `"${W__dirname}/.temp/PackageInput/" "../../../FSD/"`);
-            if (!fs.existsSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`));
+            if (!fs.existsSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`, undefined, undefined, undefined, log));
             fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${__dirname}/.temp/PackageInput/Content/`, { overwrite: true });
             const assetRegistry = `${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`;
             if (!fs.existsSync(assetRegistry)) return consolelog(`FAILED TO FIND AssetRegistry.bin ${chalk.gray(assetRegistry)}`);

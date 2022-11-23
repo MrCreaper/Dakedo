@@ -1,7 +1,7 @@
 {
-  "name": "compiler",
+  "name": "dakedo",
   "version": "0.0.3",
-  "description": "Compiler for drg\nhttps://github.com/MrCreaper/drg-modding-compiler",
+  "description": "All in one for drg\nhttps://github.com/MrCreaper/Dakedo",
   "main": "compile.js",
   "scripts": {
     "pack": "pkg compile.js --no-warnings --compress Brotli && node winBuild",
@@ -9,16 +9,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MrCreaper/drg-modding-compiler.git"
+    "url": "git+https://github.com/MrCreaper/Dakedo.git"
   },
   "author": "Mr.Creaper",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/MrCreaper/drg-modding-compiler/issues"
+    "url": "https://github.com/MrCreaper/Dakedo/issues"
   },
-  "homepage": "https://github.com/MrCreaper/drg-modding-compiler#readme",
+  "homepage": "https://github.com/MrCreaper/Dakedo#readme",
   "dependencies": {
     "find-process": "^1.4.7",
+    "form-data": "^4.0.0",
     "fs-extra": "^10.1.0",
     "ini": "^3.0.1",
     "zip-lib": "^0.7.3"
