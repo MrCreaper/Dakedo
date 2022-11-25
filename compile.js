@@ -85,6 +85,7 @@ var config = {
             }
         },
     },
+    snakeIntervention: false, // INTERtwineing snake? :)
     forceCookByDefault: false, // force cook just ignores errors and tries to pack.
     update: true, // automaticlly update
 };
@@ -103,6 +104,7 @@ var config = {
     const FormData = require('form-data');
     const readline = require(`readline`);
     const ini = require('ini');
+    const open = require('open');
     const { EventEmitter } = require(`events`);
     class Emitter extends EventEmitter { }
     const consoleloge = new Emitter();
@@ -1721,14 +1723,23 @@ var config = {
                 consolelog(`Timedout launching DRG`, undefined, undefined, undefined, log);
                 r(true);
             }, 10000);
-            child.exec(`steam steam://rungameid/548430`)
+            var result = await open(`steam://rungameid/548430`);
+            //result.on(`message`, consolelog);
+            if (!result) {
+                consolelog(`Failed to launch DRG`, undefined, undefined, undefined, log); // most likely
+                return r(true);
+            } 
+            started = true;
+            consolelog(`Launched DRG`, undefined, undefined, undefined, log); // most likely
+            r(true);
+            /*child.exec(`steam steam://rungameid/548430`)
                 .on(`exit`, () => {
                     started = true;
                     consolelog(`Launched DRG`, undefined, undefined, undefined, log); // most likely
                     r(true);
                 })
                 .on(`message`, (d) => logFile(String(d)))
-                .stdout.on('data', (d) => logFile(String(d)))
+                .stdout.on('data', (d) => logFile(String(d)))*/
         })
     }
 
@@ -1873,7 +1884,14 @@ var config = {
         {
             name: (self) => self.running == undefined ? `cook` : (self.running == false ? `cooked` : `cooking`),
             color: `#00ff00`,
-            run: () => cook(),
+            run: () => {
+                return new Promise(async r => {
+                    if (config.snakeIntervention) startSnake();
+                    let res = await cook();
+                    if (config.snakeIntervention) endSnake();
+                    r(res);
+                })
+            },
         },
         {
             name: (self) => self.running == undefined ? `publish` : (self.running == false ? `published` : `publishing`),
@@ -2338,6 +2356,11 @@ var config = {
                                     }
                                 },
                                 {
+                                    name: `snake`,
+                                    color: `#00ff00`,
+                                    run: () => startSnake(),
+                                },
+                                {
                                     name: `log`,
                                     color: `#ffffff`,
                                     run: () => consolelog(`AAA ${logHistory.length} ${new Date().getSeconds()}`),
@@ -2702,6 +2725,141 @@ var config = {
         draw();
     }
 
+    /////////////////////////// Snakee <3
+
+    var snakeRunning = false;
+    process.stdin.on('keypress', (chunk, key) => {
+        if (!snakeRunning) return;
+        var k = key.name || key.sequence;
+        snakeBoosted = key.shift;
+        switch (key.name) {
+            case `space`:
+                endSnake();
+                break;
+            case `w`:
+            case `up`:
+                snakeInputQueue.push(`up`);
+                break;
+            case `s`:
+            case `down`:
+                snakeInputQueue.push(`down`);
+                break;
+            case `a`:
+            case `left`:
+                snakeInputQueue.push(`left`);
+                break;
+            case `d`:
+            case `right`:
+                snakeInputQueue.push(`right`);
+                break;
+        }
+    });
+
+    function startSnake() {
+        snakeState = [{
+            type: `head`,
+            x: Math.floor(process.stdout.columns / 2),
+            y: Math.floor(process.stdout.rows / 2),
+        }];
+        snakeRunning = true;
+        drawSnake()
+    }
+
+    function endSnake() {
+        snakeRunning = false;
+        draw();
+    }
+
+    var snakeInputQueue = [];
+    var snakeState = [];
+    var snakeFacing = `up`;
+    function addApple() {
+        var x = Math.floor(Math.random() * process.stdout.columns);
+        var y = Math.floor(Math.random() * process.stdout.rows);
+        if (snakeState.concat(lastHeadCords).find(z => z.x == x && z.y == y)) return addApple();
+        snakeState.push({
+            type: `apple`,
+            x: x,
+            y: y,
+        });
+    }
+    var lastHeadCords = [];
+    var snakeScore = 0;
+    var snakeUpdateInterval = 100;
+    var snakeBoosted = false;
+    function drawSnake() {
+        console.clear();
+        if (!snakeRunning) return;
+        else
+            setTimeout(() => {
+                drawSnake();
+            }, snakeBoosted ? 50 : snakeUpdateInterval);
+
+        if (!snakeState.find(x => x.type == `apple`))
+            addApple();
+
+        if (snakeInputQueue.length > 0)
+            snakeFacing = snakeInputQueue.shift();
+
+        var headI = snakeState.findIndex(x => x.type == `head`);
+        var appleI = snakeState.findIndex(x => x.type == `apple`);
+        if (snakeScore)
+            lastHeadCords.push({
+                x: snakeState[headI].x,
+                y: snakeState[headI].y,
+            });
+        lastHeadCords = lastHeadCords.slice(-snakeScore);
+        lastHeadCords.forEach(c => {
+            process.stdout.cursorTo(c.x, c.y); // x=left/right y=up/down
+            process.stdout.write(chalk.whiteBright(`█`));
+        });
+
+        snakeState.forEach(s => {
+            process.stdout.cursorTo(s.x, s.y); // x=left/right y=up/down
+            switch (s.type) {
+                case `apple`:
+                    process.stdout.write(chalk.redBright(`█`));
+                    break;
+                case `head`:
+                    process.stdout.write(chalk.cyanBright(`█`));
+                    break;
+            }
+        });
+
+        switch (snakeFacing) {
+            case `up`:
+                snakeState[headI].y--;
+                break;
+            case `down`:
+                snakeState[headI].y++;
+                break;
+            case `right`:
+                snakeState[headI].x++;
+                break;
+            case `left`:
+                snakeState[headI].x--;
+                break;
+        }
+        if (snakeState[headI].x == snakeState[appleI].x && snakeState[headI].y == snakeState[appleI].y) {
+            snakeState.splice(appleI, 1);
+            addApple();
+            snakeScore++;
+        }
+
+        snakeState.forEach((x, i) => {
+            if (x.x == -1) x.x = process.stdout.columns - 1;
+            if (x.x == process.stdout.columns) x.x = 0;
+
+            if (x.y == -1) x.y = process.stdout.rows - 1;
+            if (x.y == process.stdout.rows) x.y = 0;
+
+            x.x = Math.min(Math.max(x.x, 0), process.stdout.columns);
+            x.y = Math.min(Math.max(x.y, 0), process.stdout.rows);
+        });
+
+        process.stdout.cursorTo(0, 0); // x=left/right y=up/down
+    }
+
     ////////////////////////////
 
     var selected = 0;
@@ -2715,6 +2873,7 @@ var config = {
         var selecting = false;
         var selectedOption;// = selectedMenu[selected];
         process.stdin.on('keypress', (chunk, key) => {
+            if (snakeRunning) return;
             var k = key.name || key.sequence;
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
@@ -2831,7 +2990,10 @@ var config = {
             lastFittedLogsLength = fittedLogs.length;
             draw();
         });
-        process.stdout.on(`resize`, () => draw());
+        process.stdout.on(`resize`, () => {
+            //if (snakeRunning) return drawSnake();
+            draw();
+        });
         function draw(clean = false, options = selectedMenu) {
             console.clear();
 

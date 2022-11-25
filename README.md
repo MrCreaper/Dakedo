@@ -176,5 +176,3 @@ Make the folder hieracy something like this (or u know edit the [config](#config
 Build with `npm run pkg`
 
 [umodel](https://github.com/gildor2/UEViewer) is included in the project (normal wanted pnglib for some reason).
-
-and mess around.
