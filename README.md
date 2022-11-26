@@ -1,6 +1,6 @@
 # Dakedo
 
-A all-in-one for everything needed to make DRG mods and more
+An all-in-one for everything needed to make DRG mods and more
 
 ## UI
 
@@ -11,6 +11,53 @@ A all-in-one for everything needed to make DRG mods and more
 - `q` to quit normally
 - `ctrl+c` is abort. *Except in "input mode"
 - `backspace` sends you "back" in sub-menues
+
+### UI Menu
+
+- Main menu
+  - `cook`
+    - Cook, pack, publish?, start drg?
+  - `publish`
+    - Only shown if modid, gameid and token are provided
+  - `backup`
+  - `list backups`
+    - `{id} - {modname} - {since} - {size}`
+      - Key [i] shows info
+      - Key [v] verifies it
+  - `settings`
+  - `drg`
+  - `misc`
+    - `update`
+      - `dakedo`
+      - `project`
+      - `project (toucan)`
+      - `project (template)`
+      - `project (unpack)`
+      - `generate template`
+        - Supposed to make using [UE4SS](https://github.com/UE4SS/UE4SS) simpler
+    - `export`
+      - `{paks from /FSD/Mods}`
+      - `textures`
+      - `textures flat`
+      - `drg`
+    - `compile all`
+    - `full backup`
+    - `presets`
+      - Only shown if there are presets
+    - `make mod`
+      - Copies Toucan framework template to /Game/{modname}
+      - Only shown if Toucan framework is downloaded and /Content/template exists
+    - `add desktop shortcut`
+      - Only shown on linux and not added
+    - `download mod`
+      - Downloads mod into /FSD/Mods/{name}/{pak}
+    - `debug`
+      - No.
+  - `quit`
+- Summon menu
+  - Only shown if ProjectFile cant be found
+  - `Summon Project`
+    - Summon a project at its current location
 
 ## Config
 
@@ -54,17 +101,17 @@ var config = {
         selectArrows: true,
         color: "00ffff", // The shown color for this mod/preset
         bgColor: false, // Mod name color shown as background
-        staticColor: true, // color mod names
+        staticColor: true, // color mod names, false will just make cyan
     },
     backup: {
         folder: "./backups", // leave empty for no backups
         onCompile: true,
-        max: 5, // -1 for infinite
+        max: 20, // -1 for infinite
         maxTotal: false, // false = Maximum backups for each mod. true = total backups. For the above value
         pak: false,
         blacklist: [".git"],
         all: false, // backup the entire project by default
-        verifacation: false,
+        verifacation: false, // verified backups arent deleted
     },
     zip: {
         onCompile: true, // placed in the mods/{mod name} folder
@@ -89,18 +136,20 @@ var config = {
         "release": {
             modio: {
                 modid: 1,
+                changelog: true,
             },
             ui: {
                 color: "00ffff",
             },
         },
         "mod^2": {
-            ModName: `mod2`,
+            ModName: "mod2",
             modio: {
                 modid: 2,
             }
         },
     },
+    snakeIntervention: false, // INTERtwineing snake? :)
     forceCookByDefault: false, // force cook just ignores errors and tries to pack.
     update: true, // automaticlly update
 };

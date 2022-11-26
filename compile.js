@@ -37,7 +37,7 @@ var config = {
         selectArrows: true,
         color: "00ffff", // The shown color for this mod/preset
         bgColor: false, // Mod name color shown as background
-        staticColor: true, // color mod names
+        staticColor: true, // color mod names, false will just make cyan
     },
     backup: {
         folder: "./backups", // leave empty for no backups
@@ -79,7 +79,7 @@ var config = {
             },
         },
         "mod^2": {
-            ModName: `mod2`,
+            ModName: "mod2",
             modio: {
                 modid: 2,
             }
@@ -392,6 +392,29 @@ var config = {
     }
     setTerminalTitle(package.name);
 
+    function openExplorer(path, callback) {
+        var cmd = ``;
+        switch (platform.replace(`wine`, ``)) {
+            case `win`:
+                path = path || '=';
+                cmd = `explorer`;
+                break;
+            case `linux`:
+                path = path || '/';
+                cmd = `xdg-open`;
+                break;
+            case `mac`:
+                path = path || '/';
+                cmd = `open`;
+                break;
+        }
+        let p = require(`child_process`).spawn(cmd, [path]);
+        p.on('error', (err) => {
+            p.kill();
+            return callback(err);
+        });
+    }
+
     /**
      * Clears swap and ram
      * @param {boolean} force 
@@ -411,19 +434,19 @@ var config = {
         return String(input).replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
     }
 
-    function staticCText(str) { // static colored text
-        if (!config.ui.staticColor) return chalk.cyan(str);
-        if (config.ModName == str)
-            var preset = config;
-        else
-            var preset = Object.values(config.presets).find(x => x.ModName == str);
-        if (preset && preset.ui && preset.ui.color)
-            return (
-                preset.ui.bgColor ?
-                    chalk.bgHex(`#${preset.ui.color}`) :
-                    chalk.hex(`#${preset.ui.color}`)
-            )(str);
-        return chalk.bgHex(`#${crypto.createHash('md5').update(str).digest('hex').slice(0, 5)}`)(str)
+    function staticCText(str, preset) { // static colored text
+        var c = staticC(str, preset);
+        return (c.bg ? chalk.bgHex(`#${c.c}`) : chalk.hex(`#${c.c}`))(str);
+    }
+    function staticC(str, set) { // static colored text
+        if (!config.ui.staticColor) return { c: `00ffff`, bg: false };
+        var preset = set || Object.values(config.presets).concat(config).find(x => x.ModName == str);
+        if (preset && preset.ui)
+            return {
+                c: preset.ui.color ? preset.ui.color : `00ffff`,
+                bg: preset.ui.bgColor != undefined ? preset.ui.bgColor : config.ui.bgColor
+            };
+        return { c: crypto.createHash('md5').update(String(str)).digest('hex').slice(0, 5), bg: false };
     }
 
     function getUsername() {
@@ -536,7 +559,7 @@ var config = {
 
     const wine = fs.existsSync(originalplatformPaths.linuxwine.UnrealEngine.replace(/{me}/g, username));
     const W__dirname = wine ? `Z:/${__dirname}`.replace(`//`, `/`) : __dirname; // we are Z, they are C. for wine (dirname dosent end with /)
-    const platform = `${os.platform().toLowerCase().replace(/[0-9]/g, '').replace(`darwin`, `macos`)}${wine ? `wine` : ``}`;
+    const platform = `${os.platform().toLowerCase().replace(/[0-9]/g, ``).replace(`darwin`, `macos`)}${wine ? `wine` : ``}`;
     var paths = updatePlatPathVariables(platformPaths[platform]);
     if (!paths) paths = platformPaths.givenUpos;
 
@@ -1001,6 +1024,11 @@ var config = {
             if (resp.message) return r(consolelog(`Ratelimited by github? ${resp.message}`)); // usually rate limit error
             var asset = resp.assets.find(x => x.name.includes(`modio`)); // download xinput for windows and standard for anything else
             await download(asset.browser_download_url, dir);
+
+            return;
+            // https://github.com/Archengius/UE4GameProjectGenerator
+
+            let cmd = `"${config.UnrealEngine}\\UE4Editor-Cmd.exe" "${W__dirname}/projectGen/GameProjectGenerator.uproject" -run=ProjectGenerator -HeaderRoot="${HEADER_DUMP_PATH}" -ProjectFile="${GAME_PROJECT_FILE}" -PluginManifest="${GAME_PLUGIN_MANIFEST}" -OutputDir="${OUTPUT_DIR}" -stdout -unattended -NoLogTimes`;
         })
     };
 
@@ -1108,6 +1136,7 @@ var config = {
         })
     }
 
+    const backupInfo = `backupinfo.json`;
     module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1, meta = {}) {
         if (!config.backup.folder) return;
         return new Promise(async r => {
@@ -1157,7 +1186,6 @@ var config = {
                         consolelog(`Failed to backup pak\n${chalk.gray(usedPak)}`);
                     else
                         fs.copySync(usedPak, `${buf}/${config.ModName}.pak`);
-                const backupInfo = `backupinfo.json`;
                 // backup info
                 fs.writeJSONSync(`${buf}/${backupInfo}`, {
                     id: id,
@@ -1351,6 +1379,16 @@ var config = {
         var folder = backuppath.split(`/`)[backuppath.split(`/`).length - 1];
         var log = consolelog(`Loading backup...`);
 
+        var info = {
+            id: folder.split(` - `)[0],
+            date: new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1]),
+        };
+        if (fs.existsSync(`${config.backup.folder}/${backuppath}/${backupInfo}`)) {
+            var rawInfo = fs.readFileSync(`${config.backup.folder}/${backuppath}/${backupInfo}`);
+            if (isJsonString(rawInfo))
+                info = JSON.parse(rawInfo);
+        }
+
         if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`) && fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`)) {
             consolelog(`Backup already loaded, removing.`);
             fs.rmSync(`${ProjectPath}Content/${config.ModName}`, { recursive: true, force: true });
@@ -1365,7 +1403,7 @@ var config = {
             fs.copySync(`${config.backup.folder}/${backuppath}/${config.ModName}`, `${ProjectPath}Content/${config.ModName}`);
         }
         refreshDirsToNeverCook();
-        consolelog(`Backup loaded! ${chalk.cyan(folder.split(` - `)[0])} from ${chalk.cyan(since(new Date(new Date().toUTCString()) - new Date(folder.split(` - `)[1])))} ago`, undefined, undefined, undefined, log);
+        consolelog(`Backup loaded!${info.verified ? ` ${chalk.greenBright(`✓`)}` : ``} ${chalk.cyan(info.id)} from ${chalk.cyan(since(info.date))} ago`, undefined, undefined, undefined, log);
     }
 
     module.exports.exportTex = exportTex = (pakFolder = `${config.drg}/FSD/Content/Paks/`, out = `./export/`, flatPath = ``) => {
@@ -1484,8 +1522,8 @@ var config = {
             if (resp.draft) return r();//r(consolelog(chalk.gray(`Not downloading draft update`)));
             if (resp.prerelease && !pre) return r();//r(consolelog(`Not downloading prerelease update`));
             if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`)));
-            const asset = resp.assets.find(x => x.name.includes(platform));
-            if (!asset) return r(consolelog(`No compatible update download found.. (${platform})`));
+            const asset = resp.assets.find(x => x.name.includes(platform.replace(`wine`, ``)));
+            if (!asset) return r(consolelog(`No compatible update download found.. (${platform.replace(`wine`, ``)})`));
             var filePath = process.argv[0];
             if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
             var log = consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
@@ -1728,7 +1766,7 @@ var config = {
             if (!result) {
                 consolelog(`Failed to launch DRG`, undefined, undefined, undefined, log); // most likely
                 return r(true);
-            } 
+            }
             started = true;
             consolelog(`Launched DRG`, undefined, undefined, undefined, log); // most likely
             r(true);
@@ -1927,13 +1965,13 @@ var config = {
                 var backuppath = fs.readdirSync(config.backup.folder);
                 if (!backuppath) return consolelog(`Invalid backup id!`);
                 backuppath.sort(function (a, b) {
-                    if (!fs.existsSync(`${config.backup.folder}/${a}/backupinfo.json`)) return 0;
-                    var A = fs.readFileSync(`${config.backup.folder}/${a}/backupinfo.json`);
+                    if (!fs.existsSync(`${config.backup.folder}/${a}/${backupInfo}`)) return 0;
+                    var A = fs.readFileSync(`${config.backup.folder}/${a}/${backupInfo}`);
                     if (!isJsonString(A)) return 0;
                     A = JSON.parse(A);
 
-                    if (!fs.existsSync(`${config.backup.folder}/${b}/backupinfo.json`)) return 0;
-                    var B = fs.readFileSync(`${config.backup.folder}/${b}/backupinfo.json`);
+                    if (!fs.existsSync(`${config.backup.folder}/${b}/${backupInfo}`)) return 0;
+                    var B = fs.readFileSync(`${config.backup.folder}/${b}/${backupInfo}`);
                     if (!isJsonString(B)) return 0;
                     B = JSON.parse(B);
 
@@ -1948,7 +1986,7 @@ var config = {
                 var totalSize = 0;
                 backuppath.forEach(x => {
                     var name = `${chalk.cyan(x.split(` - `)[0])} - ${since(new Date(new Date().toUTCString()) - new Date(x.split(` - `)[1] + `.000Z`))}`;
-                    var backupinfo = `${config.backup.folder}/${x}/backupinfo.json`;
+                    var backupinfo = `${config.backup.folder}/${x}/${backupInfo}`;
                     if (fs.existsSync(backupinfo)) {
                         var info = fs.readFileSync(backupinfo);
                         if (!isJsonString(info)) return;
@@ -1968,6 +2006,13 @@ var config = {
                                 case `y`: // delete, whY
                                     //fs.rmSync(`${config.backup.folder}/${x}`, { recursive: true, force: true });
                                     //consolelog(`Deleted ${x}`);
+                                    break;
+                                case `v`: // verify
+                                    info.verified = !info.verified;
+                                    fs.writeJSONSync(backupinfo, info);
+                                    const savedSelected = selected;
+                                    self.run(self);
+                                    selected = savedSelected;
                                     break;
                                 case `i`: // info
                                     var infoList = [
@@ -1998,28 +2043,37 @@ var config = {
                                                     }
                                                 );
                                                 addInfo(val);
-                                            } else {
-                                                switch (key) {
-                                                    case `size`:
-                                                        val = humanFileSize(val, true).toLowerCase().replace(` `, ``);
-                                                        break;
-                                                    case `date`:
-                                                        val = new Date(val).toISOString().replace(/T/, ' ').replace(/\..+/, '');
-                                                        infoList.push(
-                                                            {
-                                                                name: `since: ${since(new Date(new Date().toUTCString()) - new Date(val))}`,
-                                                                color: `#ffffff`,
-                                                            }
-                                                        );
-                                                        break;
-                                                }
-                                                infoList.push(
-                                                    {
-                                                        name: `${key}: ${val}`,
-                                                        color: `#ffffff`,
-                                                    }
-                                                );
+                                                return;
                                             }
+
+                                            switch (key) {
+                                                case `size`:
+                                                    val = humanFileSize(val, true).toLowerCase().replace(` `, ``);
+                                                    break;
+                                                case `date`:
+                                                    val = new Date(val).toISOString().replace(/T/, ' ').replace(/\..+/, '');
+                                                    infoList.push(
+                                                        {
+                                                            name: `since: ${since(new Date(new Date().toUTCString()) - new Date(val))}`,
+                                                            color: `#ffffff`,
+                                                        }
+                                                    );
+                                                    break;
+                                                case `verified`:
+                                                    infoList.push(
+                                                        {
+                                                            name: `${key}: ${val ? chalk.greenBright(val) : val}`,
+                                                            color: `#ffffff`,
+                                                        }
+                                                    );
+                                                    return;
+                                            }
+                                            infoList.push(
+                                                {
+                                                    name: `${key}: ${val}`,
+                                                    color: `#ffffff`,
+                                                }
+                                            );
                                         });
                                     }
                                     selectedMenu = infoList;
@@ -2168,7 +2222,7 @@ var config = {
                                     }
                                 },
                                 {
-                                    name: `compiler`,
+                                    name: package.name,
                                     color: `#ff00ff`,
                                     run: update,
                                 },
@@ -2278,8 +2332,14 @@ var config = {
                         run: () => backup(true),
                     },
                     {
-                        name: `presets`,
-                        color: `#ffffff`,
+                        name: () => {
+                            var n = `presets`.split(``);
+                            n.forEach((x, i) => {
+                                var c = staticC(Object.values(config.presets)[i].ModName);
+                                n[i] = chalk.hex(c.c)(x);
+                            });
+                            return n.join(``);
+                        },
                         run: (self) => {
                             var presetMenu = [
                                 {
@@ -2292,11 +2352,7 @@ var config = {
                                 },
                             ];
                             Object.keys(config.presets).forEach(key => {
-                                var preset = config.presets[key];
-                                if (preset.ui && preset.ui.bgColor)
-                                    var keyC = chalk.bgHex(preset.ui && preset.ui.color ? preset.ui.color : `ffffff`)(key);
-                                else
-                                    var keyC = chalk.hex(preset.ui && preset.ui.color ? preset.ui.color : `ffffff`)(key);
+                                var keyC = staticCText(key, config.presets[key]);
                                 presetMenu.push(
                                     {
                                         name: () => selectedPresetKey == key ? `> ${keyC} <` : keyC,
@@ -2307,6 +2363,7 @@ var config = {
                             selectedMenu = presetMenu;
                             selected = 0;
                         },
+                        hidden: () => Object.keys(config.presets).length != 0,
                     },
                     { // feels like a bit too in-your-face, but its in the misc menu so its not THAT in-your-face
                         name: `make mod`,
@@ -2341,6 +2398,66 @@ var config = {
                             consolelog(`Shortcut added`);
                         },
                         hidden: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${package.name}.desktop`),
+                    },
+                    {
+                        name: `go go`,
+                        color: `#ffffff`,
+                        run: () => {
+                            fs.rmSync(`${config.drg}/FSD/Content/Movies`, { recursive: true, force: true });
+                            fs.rmSync(`${config.drg}/FSD/Content/Splash`, { recursive: true, force: true });
+                            consolelog(`Cleared`);
+                        },
+                        hidden: () => fs.existsSync(`${config.drg}/FSD/Content/Movies`) || fs.existsSync(`${config.drg}/FSD/Content/Splash`),
+                    },
+                    {
+                        name: `download mod`,
+                        color: `#ffffff`,
+                        run: async (self) => {
+                            var modid = await getInput(`mod id:`, true);
+                            if (!config.modio.apikey) return consolelog(`No given api key`);
+                            var mLog = consolelog(`Finding mod...`);
+                            var resp = await getJson(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${modid}?api_key=${config.modio.apikey}`);
+                            if (resp.error && resp.error.message) return consolelog(resp.error.message);
+                            if (!resp.modfile) return consolelog(`No modfile for mod`);
+
+                            download(resp.modfile.download.binary_url);
+                            function download(url) {
+                                return new Promise(r => {
+                                    https.get(url, async res => {
+                                        if (res.headers.location) return r(await download(res.headers.location));
+                                        if (!res.headers['content-length']) {
+                                            consolelog(`github fuckery, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
+                                            return;
+                                        }
+                                        var size = parseInt(res.headers['content-length']);
+                                        var downloaded = 0;
+                                        consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
+                                        fs.mkdirsSync(`${__dirname}/.temp/`);
+                                        var zip = `${__dirname}/.temp/${resp.name.replace(/\//g, ``)}.zip`;
+                                        res.on(`data`, d => {
+                                            downloaded += d.length;
+                                            consolelog(`Downloading ${(downloaded / size * 100).toFixed(2)}%`, undefined, undefined, undefined, mLog);
+                                        })
+                                            .pipe(fs.createWriteStream(zip))
+                                            .on(`close`, async () => {
+                                                consolelog(`Downloaded, extracting...`, undefined, undefined, undefined, mLog);
+                                                // extract downloaded zip
+                                                await zl.extract(zip, zip.replace(`.zip`, ``));
+                                                consolelog(`Extracted`, undefined, undefined, undefined, mLog);
+                                                // simplify directiories
+                                                fs.moveSync(zip.replace(`.zip`, ``), `${config.drg}/FSD/Mods/${resp.name.replace(/\//g, ``)}`, { overwrite: true });
+                                                consolelog(`Done`, undefined, undefined, undefined, mLog);
+                                                r(true);
+                                            });
+                                    })
+                                        .on('error', (e) => {
+                                            consolelog(`Error downloading source zip:`);
+                                            consolelog(e);
+                                            r(e);
+                                        });
+                                });
+                            }
+                        }
                     },
                     {
                         name: `debug`,
@@ -2485,15 +2602,6 @@ var config = {
                                     },
                                 },
                                 {
-                                    name: `go go`,
-                                    color: `#ffffff`,
-                                    run: () => {
-                                        fs.rmSync(`${config.drg}/FSD/Content/Movies`, { recursive: true, force: true });
-                                        fs.rmSync(`${config.drg}/FSD/Content/Splash`, { recursive: true, force: true });
-                                        consolelog(`Cleared`);
-                                    },
-                                },
-                                {
                                     name: `empty .uproject`,
                                     color: `#ffffff`,
                                     run: () => {
@@ -2609,56 +2717,6 @@ var config = {
                                         consolelog(await getInput(`echo:`));
                                     }
                                 },
-                                {
-                                    name: `download mod`,
-                                    color: `#ffffff`,
-                                    run: async (self) => {
-                                        var modid = await getInput(`mod id:`, true);
-                                        if (!config.modio.apikey) return consolelog(`No given api key`);
-                                        var mLog = consolelog(`Finding mod...`);
-                                        var resp = await getJson(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${modid}?api_key=${config.modio.apikey}`);
-                                        if (resp.error && resp.error.message) return consolelog(resp.error.message);
-                                        if (!resp.modfile) return consolelog(`No modfile for mod`);
-
-                                        download(resp.modfile.download.binary_url);
-                                        function download(url) {
-                                            return new Promise(r => {
-                                                https.get(url, async res => {
-                                                    if (res.headers.location) return r(await download(res.headers.location));
-                                                    if (!res.headers['content-length']) {
-                                                        consolelog(`github fuckery, ${String(res.statusMessage).toLowerCase()}`, undefined, undefined, undefined, mLog); // ok.
-                                                        return;
-                                                    }
-                                                    var size = parseInt(res.headers['content-length']);
-                                                    var downloaded = 0;
-                                                    consolelog(`Downloading 0%`, undefined, undefined, undefined, mLog);
-                                                    fs.mkdirsSync(`${__dirname}/.temp/`);
-                                                    var zip = `${__dirname}/.temp/${resp.name.replace(/\//g, ``)}.zip`;
-                                                    res.on(`data`, d => {
-                                                        downloaded += d.length;
-                                                        consolelog(`Downloading ${(downloaded / size * 100).toFixed(2)}%`, undefined, undefined, undefined, mLog);
-                                                    })
-                                                        .pipe(fs.createWriteStream(zip))
-                                                        .on(`close`, async () => {
-                                                            consolelog(`Downloaded, extracting...`, undefined, undefined, undefined, mLog);
-                                                            // extract downloaded zip
-                                                            await zl.extract(zip, zip.replace(`.zip`, ``));
-                                                            consolelog(`Extracted`, undefined, undefined, undefined, mLog);
-                                                            // simplify directiories
-                                                            fs.moveSync(zip.replace(`.zip`, ``), `${config.drg}/FSD/Mods/${resp.name.replace(/\//g, ``)}`, { overwrite: true });
-                                                            consolelog(`Done`, undefined, undefined, undefined, mLog);
-                                                            r(true);
-                                                        });
-                                                })
-                                                    .on('error', (e) => {
-                                                        consolelog(`Error downloading source zip:`);
-                                                        consolelog(e);
-                                                        r(e);
-                                                    });
-                                            });
-                                        }
-                                    }
-                                },
                             ];
                             selectedMenu = debugMenu;
                             selected = 0;
@@ -2675,6 +2733,16 @@ var config = {
             color: `#ff0000`,
             run: () => exitHandler(true),
         },
+    ];
+    const summonMenu = [
+        {
+            name: `Summon project`,
+            color: `#ffffff`,
+            run: () => {
+                fs.mkdirsSync(`${__dirname}/${config.ProjectName}/${package.name}`);
+                fs.moveSync(`${a}`, `${__dirname}/${config.ProjectName}/${a}`);
+            },
+        }
     ];
     config.ui.shortcuts.forEach(x => {
         var index = x.index == undefined ? mainMenu.length : x.index;
@@ -2700,7 +2768,7 @@ var config = {
         };
         mainMenu.splice(index, 0, shortcut);
     });
-    var selectedMenu = mainMenu;
+    var selectedMenu = fs.existsSync(`${__dirname}${config.ProjectFile}`) ? mainMenu : summonMenu;
 
     var isGettingInput = false;
     var inputNumbersOnly = false;
@@ -2962,7 +3030,7 @@ var config = {
                     } else consolelog(`No run command for ${name}`);
                     break;
                 case `q`:
-                    return exitHandler();
+                    return exitHandler(true);
                 case `C`: // for butter/fat fingers
                 case `c`:
                     if (key.ctrl)

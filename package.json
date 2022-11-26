@@ -34,7 +34,8 @@
       "./umodel",
       "./umodel.exe",
       "LICENSE",
-      "creaper.png"
+      "creaper.png",
+      "./projectGen"
     ],
     "targets": [
       "node18-linux-x64",
