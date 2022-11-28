@@ -1,10 +1,11 @@
 {
   "name": "dakedo",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "All in one for drg\nhttps://github.com/MrCreaper/Dakedo",
   "main": "compile.js",
   "scripts": {
     "pack": "pkg compile.js --no-warnings --compress Brotli && node winBuild",
+    "up": "ncu -u && npm i",
     "pkg": "npm run pack && ./compile-linux"
   },
   "repository": {
@@ -20,7 +21,8 @@
   "dependencies": {
     "find-process": "^1.4.7",
     "form-data": "^4.0.0",
-    "fs-extra": "^10.1.0",
+    "fs-extra": "^11.0.0",
+    "fswin": "^3.22.106",
     "ini": "^3.0.1",
     "open": "^8.4.0",
     "zip-lib": "^0.7.3"

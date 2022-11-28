@@ -39,6 +39,8 @@ An all-in-one for everything needed to make DRG mods and more
       - `{paks from /FSD/Mods}`
       - `textures`
       - `textures flat`
+      - `make empty dirs`
+        - Make an empty directories hierachy in the project folder
       - `drg`
     - `compile all`
     - `full backup`
