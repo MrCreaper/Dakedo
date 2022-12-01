@@ -256,14 +256,22 @@ var config = {
         if (string[indexOfLF - 1] === '\r') return '\r\n'
         return '\n'
     }
-    function searchDir(p = ``, search = []) {
+    /**
+     * 
+     * @param {string} p 
+     * @param {string[] || string} search 
+     * @param {boolean} strict 
+     * @returns 
+     */
+    function searchDir(p = ``, search = [], strict = true) {
         var hits = [];
+        if (!Array.isArray(search)) search = [search];
         queryDir(p);
         function queryDir(path) {
             fs.readdirSync(path).forEach(x => {
                 var fp = `${path}/${x}`
                 var s = fs.statSync(fp);
-                if (/*s.isFile() && */search.includes(x))
+                if (strict ? search.includes(x) : search.find(y => y.includes(x)))
                     hits.push(fp);
                 else
                     if (s.isDirectory()) queryDir(fp);
@@ -729,13 +737,14 @@ var config = {
         myVersionCheck: ``,
         templateVersion: ``,
         templateVersionCheck: ``,
+        selectedPreset: ``,
     };
     const cacheFolder = `${__dirname}/.cache/`;
     if (!fs.existsSync(cacheFolder)) {
-        fs.mkdirSync(cacheFolder);
+        fs.mkdirsSync(cacheFolder);
         if (platform == `win`)
             fswin.setAttributesSync(cacheFolder, {
-                IS_HIDDEN: true
+                IS_HIDDEN: true,
             });
     }
     const cachePath = `${cacheFolder}cache.json`;
@@ -743,7 +752,7 @@ var config = {
     function readCache() {
         if (!fs.existsSync(cachePath)) return writeCache();
         let read = fs.readFileSync(cachePath);
-        if (!isJsonString(cachePath)) return writeCache();
+        if (!isJsonString(read)) return writeCache();
         read = JSON.parse(read);
         Object.keys(cache).forEach(x => {
             if (read[x])
@@ -751,7 +760,7 @@ var config = {
         });
     }
     function writeCache() {
-        fs.writeJsonSync(cachePath, cache);
+        fs.writeFileSync(cachePath, JSON.stringify(cache, null, 4));
     }
 
     // temp
@@ -761,14 +770,15 @@ var config = {
         return new Promise(r => {
             if (fs.existsSync(tempFolder)) {
                 let log = consolelog(`Clearing temp..`);
-                fs.rm(tempFolder, { recursive: true, force: true }); // sync just takes a while
-                consolelog(`Temp cleared!`, undefined, undefined, undefined, log);
+                fs.rmSync(tempFolder, { recursive: true, force: true }); // sync just takes a while
+                consolelog(chalk.gray(`Temp cleared!`), undefined, undefined, undefined, log);
                 r(true);
             } else r(false);
         });
     }
 
     function makeTemp() {
+        if (fs.existsSync(tempFolder)) return;
         fs.mkdirSync(tempFolder);
         if (platform == `win`)
             fswin.setAttributesSync(tempFolder, {
@@ -833,10 +843,12 @@ var config = {
             state = JSON.parse(state);
             var i = state.Mods.findIndex(x => x.ID == modid);
             if (i == -1) return r(consolelog(`Not subscribed to mod? (modio cache) id:${modid}`));
-            state.Mods[i].Profile.modfile = modFile;
+            if (modFile)
+                state.Mods[i].Profile.modfile = modFile;
+            state.Mods[i].Profile.modfile.date_added = new Date().getTime();
             fs.writeJSONSync(statePath, state);
             fs.cpSync(pakPath, `${config.modio.cache}mods/${modid}/${modname}.pak`); // copy over old pak
-            consolelog(chalk.gray(`Updated modio cache`));
+            consolelog(chalk.gray(`Updated modio cache${modFile ? `` : ` (without version)`}`));
             r(true);
         })
     };
@@ -898,6 +910,7 @@ var config = {
                     if (resp.error)
                         consolelog(resp.error);
                     else consolelog(resp);
+                    updateCache();
                     r(false);
                 });
             });
@@ -1360,9 +1373,7 @@ var config = {
         })
     };
 
-    module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName]) {
-        // cant use ini since it kinda fucks up directories to never cook? (it has the first one in a variable)
-        whitelist = whitelist.concat(config.DirsToCook);
+    module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName].concat(config.DirsToCook), clear = false) {
         // split up folders for whitelist
         var newList = [];
         whitelist.forEach(x => {
@@ -1436,8 +1447,9 @@ var config = {
         }
         dirs = dirs.concat(config.DirsToNeverCook);
         dirs.forEach(x => {
-            if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
-                read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
+            if (!clear)
+                if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
+                    read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
         });
         fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
     }
@@ -1976,16 +1988,22 @@ var config = {
         })
     }
 
+    setPreset(cache.selectedPreset);
+
     function setPreset(key = selectedPresetKey) {
         updateConfig(true, false); // clean preset
         if (!key) return;
         var preset = config.presets[key];
         if (selectedPresetKey == key && selectedPresetKey) {
             selectedPresetKey = ``;
+            cache.selectedPreset = selectedPresetKey;
+            writeCache();
             consolelog(`Preset cleared.`);
             return;
         }
         selectedPresetKey = key;
+        cache.selectedPreset = selectedPresetKey;
+        writeCache();
         if (!preset) return consolelog(`Invalid preset: ${key}`);
         applyPreset();
         function applyPreset(set = preset, path = []) {
@@ -2713,7 +2731,7 @@ var config = {
                                     run: () => cook(true),
                                 },
                                 {
-                                    name: `clear caches`,
+                                    name: `clear project caches`,
                                     color: `#ffffff`,
                                     run: () => {
                                         [
@@ -2738,18 +2756,15 @@ var config = {
                                     },
                                 },
                                 {
-                                    name: `clear DerivedDataCache`,
+                                    name: `clear cache`,
                                     color: `#ffffff`,
                                     run: () => {
-                                        [
-                                            `${ProjectPath}DerivedDataCache`,
-                                        ].forEach(x => {
-                                            if (fs.existsSync(x)) {
-                                                fs.rmSync(x, { recursive: true, force: true });
-                                                consolelog(`Deleted ${x}`);
-                                            }
-                                        });
-                                        consolelog(`Cleared`);
+                                        if (fs.existsSync(cacheFolder)) {
+                                            fs.rmSync(cacheFolder, { recursive: true, force: true })
+                                            consolelog(`Cleared`);
+                                        }
+                                        else
+                                            consolelog(`nothing to clear`);
                                     },
                                 },
                                 {
@@ -2866,7 +2881,20 @@ var config = {
                                     name: `echo`,
                                     color: `#ffffff`,
                                     run: async (self) => {
-                                        consolelog(await getInput(`echo:`));
+                                        let echo = await getInput(`echo:`);
+                                        consolelog(`${echo} (${echo.length})`);
+                                    }
+                                },
+                                {
+                                    name: `wipe local mods`,
+                                    color: `#ffffff`,
+                                    run: async (self) => {
+                                        searchDir(`${config.drg}/FSD/Mods`, `.pak`, false).forEach(x => {
+                                            consolelog(PATH.basename(x));
+                                            if (x.replace(PATH.basename(x), ``).endsWith(`/${PATH.basename(x).split(`.`)[0]}/`))
+                                                fs.rmSync(x, { recursive: true, force: true });
+                                        });
+                                        consolelog(`Cleared`);
                                     }
                                 },
                                 {
@@ -2877,6 +2905,7 @@ var config = {
                                             "drg": config.drg,
                                             "mods": `${config.drg}/FSD/Mods`,
                                             "local": __dirname,
+                                            "metadata": `${config.modio.cache}metadata`,
                                         };
                                         let exploreMenu = [
                                             {
@@ -3154,8 +3183,11 @@ var config = {
                 return;
             }
             var back = selectedMenu.find(x => removeColor(dyn(x.name, x)) == `back`);
-            if (key.name == `backspace` && back && back.run) {
-                back.run(back);
+            if (key.name == `backspace`) {
+                if (back)
+                    back.run(back);
+                else
+                    selected = 0;
                 return draw();
             }
             if (selectedOption && selectedOption.key)
@@ -3487,7 +3519,7 @@ var config = {
     if (process.argv.includes(`-onlypublish`))
         return await publish();
 
-    function pack() {
+    function pack(ProjectFolder = ProjectPath) {
         return new Promise(async r => {
             logFile(`\n${config.cmds.Packing}\n\n`);
 
@@ -3496,9 +3528,9 @@ var config = {
             makeTemp();
             consolelog(`packing...`, undefined, undefined, undefined, log);
             fs.writeFileSync(`${tempFolder}Input.txt`, `"${W__dirname}/.temp/PackageInput/" "../../../FSD/"`);
-            if (!fs.existsSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`, undefined, undefined, undefined, log));
-            fs.moveSync(`${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${tempFolder}PackageInput/Content/`, { overwrite: true });
-            const assetRegistry = `${ProjectPath}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`;
+            if (!fs.existsSync(`${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`, undefined, undefined, undefined, log));
+            fs.moveSync(`${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${tempFolder}PackageInput/Content/`, { overwrite: true });
+            const assetRegistry = `${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`;
             if (!fs.existsSync(assetRegistry)) return consolelog(`FAILED TO FIND AssetRegistry.bin ${chalk.gray(assetRegistry)}`);
             fs.moveSync(assetRegistry, `${tempFolder}PackageInput/AssetRegistry.bin`, { overwrite: true });
 
@@ -3690,34 +3722,62 @@ var config = {
             if (config.logging.cleaning.clearOnCook)
                 fs.writeFileSync(config.logging.file, ``); // clear logs
             startTime = new Date();
-            if (config.isolateFiles) { // copy files into a temp folder and cook that
-                var isoF = `${cacheFolder}isoCham/Content/`;
-                var isoLog = consolelog(`Isolating files..`);
-                var isolationCount = 0;
-                for (var i = 0; i < config.isolateFiles.length; i++) {
-                    let x = config.isolateFiles[i];
-                    consolelog(`Isolating ${chalk.cyan(isolationCount)}/${chalk.cyan(config.isolateFiles.length)} ${chalk.gray(x)} ...`, undefined, undefined, undefined, isoLog);
+            let cmd = config.cmds.Cooking.replace(config.ModName, config.ModName.replace(/ /g, `-`));
+            refreshDirsToNeverCook(undefined, config.DirsToCook.length ? true : undefined);
+            if (config.DirsToCook.length) { // copy files into a temp folder and cook that
+                var isoF = `${cacheFolder}isoCham/FSD/`; // I would have this all in the "ProjectPath" but an open editor would like that I think
+                let isoLog = consolelog(`Making isolation chamber..`);
+                let folders = fs.readdirSync(`${__dirname}${config.ProjectFile}`.replace(PATH.basename(config.ProjectFile), ``))
+                    .filter(x => ![
+                        PATH.basename(config.backup.folder),
+                        `compiler`,
+                        `Content`
+                    ].includes(x));
+                /*let folders = [
+                    `Intermediate`,
+                    `Plugins`,
+                    //`Saved`,
+                    `Source`,
+                    `Config`,
+                    `Binaries`,
+                    `${config.ProjectName}.uproject`,
+                ];*/
+                cmd = cmd.replace(`${platform.includes(`wine`) ? W__dirname : __dirname}${config.ProjectFile}`, `${isoF}${folders.find(x => x.endsWith(`.uproject`))}`);
+                //folders = [];
+                for (var i = 0; i < folders.length; i++) {
+                    let f = folders[i];
+                    consolelog(`Updating chamber project ${chalk.cyan(i + 1)}/${chalk.cyan(folders.length)} ${chalk.gray(f)}`, undefined, undefined, undefined, isoLog);
+                    if (fs.existsSync(`${isoF}${f}`))
+                        fs.rmSync(`${isoF}${f}`, { recursive: true, force: true });
+                    fs.copySync(`${ProjectPath}/${f}`, `${isoF}${f}`);
+                }
+                let isolationCount = 0;
+                consolelog(`Isolating files..`, undefined, undefined, undefined, isoLog);
+                for (var i = 0; i < config.DirsToCook.length; i++) {
+                    let x = config.DirsToCook[i];
+                    consolelog(`Isolating ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)} ${chalk.gray(x)} ...`, undefined, undefined, undefined, isoLog);
                     try {
-                        fs.copySync(`${ProjectFolder}/Content/${x}`, `${isoF}${x}`);
+                        if (fs.existsSync(`${isoF}Content/${x}`))
+                            fs.rmSync(`${isoF}Content/${x}`, { recursive: true, force: true });
+                        fs.copySync(`${ProjectPath}/Content/${x}`, `${isoF}Content/${x}`);
                         isolationCount++;
-                        consolelog(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.isolateFiles.length)} ${chalk.gray(x)}`, undefined, undefined, undefined, isoLog);
+                        consolelog(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)} ${chalk.gray(x)}`, undefined, undefined, undefined, isoLog);
                     } catch (e) {
                         consolelog(`Isolation failed ${chalk.redBright(x)}`);
                     }
                 }
-                consolelog(chalk.cyan(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.isolateFiles.length)}`), undefined, undefined, undefined, isoLog);
+                consolelog(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)}`, undefined, undefined, undefined, isoLog);
             }
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
             var log = consolelog(`cooking...`);
-            refreshDirsToNeverCook();
-            logFile(`\n${config.cmds.Cooking}\n\n`);
+            logFile(`\n${cmd}\n\n`);
             killDrg();
-            var ch = child.exec(config.cmds.Cooking);
+            var ch = child.exec(cmd);
             ch.on('exit', async () => {
                 var d = cleanLogs();
                 if (d.includes(`Success - 0 error(s),`) || force || config.forceCookByDefault) {
                     consolelog(chalk.greenBright(`Cooked!${!d.includes(`Success - 0 error(s),`) && (force || config.forceCookByDefault) ? ` ;)` : ``}`), undefined, undefined, undefined, log);
-                    await pack();
+                    await pack(isoF ? isoF : undefined);
                     r();
                 } else if (d.includes(`Failure - `)) {
                     var errs = 0;
