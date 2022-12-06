@@ -177,8 +177,8 @@ var config = {
         function wrapLogs(logs = []) {
             var out = [];
             logs.forEach(x => {
-                var log = String(x);
-                while (log.length > process.stdout.columns) {
+                let log = String(x);
+                while (removeColor(log).length > process.stdout.columns) {
                     out.push(log.slice(0, process.stdout.columns));
                     log = log.slice(process.stdout.columns);
                 }
@@ -440,9 +440,11 @@ var config = {
         let p = require(`child_process`).spawn(cmd, [path]);
         p.on('error', (err) => {
             p.kill();
-            return callback(err);
+            if (callback)
+                return callback(err);
         }).on(`spawn`, () => {
-            return callback();
+            if (callback)
+                return callback();
         });
     }
 
@@ -515,6 +517,7 @@ var config = {
                 Packing: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe {dir}/.temp/{mod}.pak -Create="{dir}/.temp/Input.txt`,
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract {path} {outpath} -unattended -NoLogTimes`,
+                GenerateProject: `{UnrealEngine}/Engine/Binaries/DotNET/UnrealBuildTool.exe -projectfiles -project="{dir}{pf}" -game -rocket -progress`,
             },
             modio: {
                 cache: `C:\\users\\Public\\mod.io\\2475\\`,
@@ -739,7 +742,7 @@ var config = {
         templateVersionCheck: ``,
         selectedPreset: ``,
     };
-    const cacheFolder = `${__dirname}/.cache/`;
+    const cacheFolder = `${__dirname}/cache/`;
     if (!fs.existsSync(cacheFolder)) {
         fs.mkdirsSync(cacheFolder);
         if (platform == `win`)
@@ -1596,12 +1599,36 @@ var config = {
         });
     }
 
+    function colorVersion(
+        oldVersion = `0.0.0`,
+        newVersion = `0.0.1`,
+        upColor = `00ffff`,
+        downColor = `ff0000`,
+        noneColor = `808080`
+    ) {
+        var oldV = oldVersion.split(`.`).map(x => parseInt(x));
+        var newV = newVersion.split(`.`).map(x => parseInt(x));
+        var outV = [];
+        for (var i = 0; i < oldV.length; i++) {
+            var o = oldV[i];
+            var n = newV[i];
+            if (o == n) // no change
+                outV.push(chalk.hex(noneColor)(n));
+            else if (o < n) // upgrade
+                outV.push(chalk.hex(upColor)(n));
+            else // downgrade
+                outV.push(chalk.hex(downColor)(n));
+        }
+        return outV.join(`.`);
+    }
+
     async function update(repo = `MrCreaper/drg-linux-modding`, pre = false, force = false) {
         if (!repo) return consolelog(`No repository for update?`);
         const ver = require(`./package.json`).version;
         return new Promise(async r => {
             if (!process.pkg) return r(consolelog(chalk.gray(`Not downloading update for .js version`)));
             if (!force && new Date(new Date().toUTCString()) - new Date(cache.myVersionCheck) < 86400000) return; // 24h
+            var log = consolelog(`Checking for update...`);
             var resp = await getJson({
                 hostname: 'api.github.com',
                 port: 443,
@@ -1611,16 +1638,16 @@ var config = {
                     'User-Agent': `${capitalize(package.name)}/${ver}`,
                 },
             });
-            if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`)); // usually rate limit error
+            if (resp.message) return r(consolelog(`Update error: ${resp.message.replace(`rate limit`, chalk.redBright(`rate limit`)).replace(/\(.*?\)\s?/g, '')}`, undefined, undefined, undefined, log)); // usually rate limit error
             var newVer = resp.tag_name.toLocaleLowerCase().replace(/v/g, ``);
-            if (newVer == ver) return r(consolelog(`Up-to-date ${newVer}`));
-            if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`)));
-            if (resp.prerelease && !pre) return r(consolelog(`Not downloading prerelease update`));
+            if (newVer == ver) return r(consolelog(`Up-to-date (${newVer})`, undefined, undefined, undefined, log));
+            if (resp.draft) return r(consolelog(chalk.gray(`Not downloading draft update`, undefined, undefined, undefined, log)));
+            if (resp.prerelease && !pre) return r(consolelog(`Not downloading prerelease update`, undefined, undefined, undefined, log));
             const asset = resp.assets.find(x => x.name.includes(platform.replace(`wine`, ``)));
-            if (!asset) return r(consolelog(`No compatible update download found.. (${platform.replace(`wine`, ``)})`));
+            if (!asset) return r(consolelog(`No compatible update download found.. (${platform.replace(`wine`, ``)})`, undefined, undefined, undefined, log));
             var filePath = process.argv[0];
             if (!fs.existsSync(filePath)) return r(consolelog(`I dont exist..?\n${chalk.gray(filePath)}`, undefined, undefined, undefined, log));
-            var log = consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
+            consolelog(`Downloading update... ${ver} => ${newVer}`, undefined, undefined, undefined, log);
             //if (!fs.accessSync(__dirname)) return consolelog(`No access to local dir`);
             exiting = true; // pause ability to exit
             download(asset.browser_download_url);
@@ -1649,7 +1676,7 @@ var config = {
                                 }
                                 fs.rmSync(tempFile);
                                 fs.chmodSync(filePath, 0777);
-                                consolelog(`Update finished! v${ver} => v${resp.tag_name.replace(/v/g, ``)} ${chalk.greenBright(`${(downloaded / size * 100).toFixed(2)}%`)}`, undefined, undefined, undefined, log);
+                                consolelog(`Update finished! v${ver} => v${colorVersion(ver, resp.tag_name.replace(/v/g, ``))} ${chalk.greenBright(`${(downloaded / size * 100).toFixed(2)}%`)}`, undefined, undefined, undefined, log);
                                 cache.myVersionCheck = new Date(new Date().toUTCString());
                                 writeCache();
                                 try {
@@ -1747,9 +1774,7 @@ var config = {
             if (Template) {
                 const templatePath = `${tempFolder}FSD-Template/`;
                 var template = await downloadRepo(templatePath, `DRG-Modding/FSD-Template`, mLog);
-                if (template != true) return r(consolelog(`Failed to download template`));
-                // Remove cringe
-                fs.rmSync(`${templatePath}Content/`, { recursive: true, force: true });
+                if (template != true) return r(consolelog(`Failed to download template`, undefined, undefined, undefined, mLog));
 
                 updates[templatePath] = [ // files we want from the template
                     `Binaries`,
@@ -1790,7 +1815,6 @@ var config = {
             // :)
             //await backup(true);
             // update folders
-            var done = 0;
             var updateList = [];
             Object.keys(updates).forEach(key => {
                 updates[key].forEach(x => {
@@ -1872,11 +1896,14 @@ var config = {
                             pile += `${dir}/`;
 
                             var seed = rawList.find(x => x[2] == pile); // find what I need to "branch out" from
-                            if (!seed) return consolelog(`Missing seed for ${item}\n${pile}`);
-                            var source = seed[0].replace(seed[2], ``); // source directory
+                            consolelog(rawList);
+                            return consolelog(`${pile}\nITEM: ${item}`);
+                            if (!seed) return consolelog(`Missing seed for ${item}\n${pile}\n${x[2]}`);
+                            var source = PATH.dirname(seed); // source directory
 
                             fs.readdirSync(`${source}/${pile}`).forEach(x => {
                                 var keep = keepList.find(y => y[2] == `${pile}/${x}`);
+                                consolelog(`keep: ${keep}`);
                                 if (keep) return processDir(keep); // file is needed 
                             });
                         });
@@ -1885,10 +1912,11 @@ var config = {
                 return newList;
             }
 
-            updateList = cleanUpdateList();
+            //updateList = cleanUpdateList();
             //consolelog(updateList);
             //return;
 
+            var done = 0;
             for (var i = 0; i < updateList.length; i++) {
                 var source = updateList[i][0];
                 var dest = updateList[i][1];
@@ -2039,6 +2067,11 @@ var config = {
 
     var children = [];
     var exiting = false;
+    /**
+     * 
+     * @param {Error|boolean} err Error or if "true" will just exit normally without waiting for input
+     * @returns 
+     */
     async function exitHandler(err) {
         if (fs.existsSync(tempFolder) && process.pkg) await clearTemp();
         if (children)
@@ -2053,7 +2086,7 @@ var config = {
                     children.splice(children.findIndex(x => x == x), 1);
                 });
         if (err && err != `SIGINT` && err.name && err.message) console.log(err);
-        if (process.pkg && err != true) {
+        if (process.pkg && err == undefined) {
             if (exiting) return;
             else consolelog(`[ Press any key to exit ]`);
             exiting = true;
@@ -2264,7 +2297,7 @@ var config = {
             name: `settings`,
             color: `#808080`,
             run: (self) => {
-                var settingsMenu = [
+                selectedMenu = [
                     {
                         name: () => `${config.ProjectName} > ${staticCText(config.ModName)}`,
                     },
@@ -2277,63 +2310,88 @@ var config = {
                         },
                     },
                 ];
+                selected = 1;
                 addSettings();
                 function addSettings(configs = unVaredConfig, path = []) {
-                    Object.keys(configs).forEach(key => {
-                        var val = configs[key];
-                        switch (typeof val) {
-                            case `object`:
-                                if (key != `presets`)
-                                    return addSettings(val, path.concat([key]));
-                            case `string`:
-                            case `number`:
-                            case `boolean`:
-                                break;
-                            default:
-                                return;
-                        }
-                        //val  = get();
-                        var setting = {
-                            name: () => {
-                                var name = path.length == 0 ? key : `${path.join(` > `)} > ${key}`;
-                                return name.replace(key, chalk.hex(getValueColor(val))(key));
-                            },
-                            run: async (self) => {
-                                // I hate nodejs values and refrences
-                                function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
-                                    stack = stack.concat([key]);
-                                    while (stack.length > 1) {
-                                        object = object[stack.shift()];
+                    var cat = path[0];
+
+                    var category = {
+                        catName: cat,
+                        name: `-- ${cat} --`,
+                        children: [],
+                        open: false,
+                        run: async (selfCat) => {
+                            if (selfCat.open) {
+                                selfCat.children.forEach(x =>
+                                    selectedMenu.splice(
+                                        selectedMenu.findIndex(y => y == x)
+                                        , 1)
+                                );
+                                selfCat.children = [];
+                                selfCat.open = false;
+                            } else
+                                Object.keys(configs).forEach(key => {
+                                    var val = configs[key];
+                                    switch (typeof val) {
+                                        case `object`:
+                                            if (key == `presets`) return;
+                                            return addSettings(val, path.concat([key]));
+                                        case `string`:
+                                        case `number`:
+                                        case `boolean`:
+                                            break;
+                                        default:
+                                            return;
                                     }
-                                    return object[stack.shift()] = newValue;
-                                }
-                                function get(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
-                                    stack = stack.concat([key]);
-                                    while (stack.length > 1) {
-                                        object = object[stack.shift()];
-                                    }
-                                    return object[stack.shift()];
-                                }
-                                switch (typeof val) {
-                                    case `boolean`:
-                                        val = set(!get());
-                                        break;
-                                    case `string`:
-                                        val = set(await getInput(`${dyn(self.name, self)}:`, false, -1, get()));
-                                        break;
-                                    case `number`:
-                                        val = set(parseInt(await getInput(`${dyn(self.name, self)}:`, true, -1, get())));
-                                        break;
-                                }
-                                writeConfig(unVaredConfig);
-                                updateConfig();
-                            },
-                        };
-                        settingsMenu.push(setting);
-                    });
+                                    //val  = get();
+                                    var setting = {
+                                        name: () =>
+                                            `${path.concat(key).join(` > `)}`.replace(key, chalk.hex(getValueColor(val))(key))
+                                        ,
+                                        run: async (self) => {
+                                            // I hate nodejs values and refrences
+                                            function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                                stack = stack.concat([key]);
+                                                while (stack.length > 1) {
+                                                    object = object[stack.shift()];
+                                                }
+                                                return object[stack.shift()] = newValue;
+                                            }
+                                            function get(object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
+                                                stack = stack.concat([key]);
+                                                while (stack.length > 1) {
+                                                    object = object[stack.shift()];
+                                                }
+                                                return object[stack.shift()];
+                                            }
+                                            switch (typeof val) {
+                                                case `boolean`:
+                                                    val = set(!get());
+                                                    break;
+                                                case `string`:
+                                                    val = set(await getInput(`${dyn(self.name, self)}:`, false, -1, get()));
+                                                    break;
+                                                case `number`:
+                                                    val = set(parseInt(await getInput(`${dyn(self.name, self)}:`, true, -1, get())));
+                                                    break;
+                                            }
+                                            writeConfig(unVaredConfig);
+                                            updateConfig();
+                                        },
+                                    };
+                                    if (selfCat.catName)
+                                        selectedMenu.splice(selectedMenu.findIndex(x => x == selfCat), 0, setting);
+                                    else selectedMenu.push(setting);
+                                    selfCat.children.push(setting);
+                                    selfCat.open = true;
+                                });
+                        },
+                    };
+                    if (!cat)
+                        category.run(category);
+                    else
+                        selectedMenu.push(category);
                 }
-                selectedMenu = settingsMenu;
-                selected = 1;
             },
             hidden: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
         },
@@ -2471,14 +2529,16 @@ var config = {
                             }
                             searchFolder(`${config.drg}/FSD/Mods/`, `.pak`)
                                 .forEach(x => {
+                                    let n = PATH.basename(x).replace(`.pak`, ``);
                                     exportMenu.splice(1, 0, {
-                                        name: staticCText(PATH.basename(x.replace(`.pak`, ``))),
+                                        name: staticCText(n),
                                         color: `#ffffff`,
                                         run: async (self) => {
                                             return new Promise(async r => {
-                                                var log = consolelog(`Unpacking ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`);
+                                                let log = consolelog(`Unpacking ${staticCText(n)}`);
                                                 await unpack(x);
-                                                consolelog(`Unpacked ${chalk.cyan(PATH.basename(x).replace(`.pak`, ``))}`, undefined, undefined, undefined, log);
+                                                consolelog(`Unpacked ${staticCText(n)}`, undefined, undefined, undefined, log);
+                                                openExplorer(`${__dirname}/${n}`);
                                                 r();
                                             })
                                         },
@@ -2586,8 +2646,8 @@ var config = {
                             if (!config.modio.apikey) return consolelog(`No given api key`);
                             var mLog = consolelog(`Finding mod...`);
                             var resp = await getJson(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${modid}?api_key=${config.modio.apikey}`);
-                            if (resp.error && resp.error.message) return consolelog(resp.error.message);
-                            if (!resp.modfile) return consolelog(`No modfile for mod`);
+                            if (resp.error && resp.error.message) return consolelog(resp.error.message, undefined, undefined, undefined, mLog);
+                            if (!resp.modfile) return consolelog(`No modfile for mod`, undefined, undefined, undefined, mLog);
 
                             download(resp.modfile.download.binary_url);
                             function download(url) {
@@ -2614,7 +2674,7 @@ var config = {
                                                 await zl.extract(zip, zip.replace(`.zip`, ``));
                                                 consolelog(`Extracted`, undefined, undefined, undefined, mLog);
                                                 // simplify directiories
-                                                fs.moveSync(zip.replace(`.zip`, ``), `${config.drg}/FSD/Mods/${resp.name.replace(/\//g, ``)}`, { overwrite: true });
+                                                fs.moveSync(zip.replace(`.zip`, ``), `${config.drg}/FSD/Mods/${resp.modfile.filename.split(`.`)[0]}`, { overwrite: true });
                                                 consolelog(`Done`, undefined, undefined, undefined, mLog);
                                                 r(true);
                                             });
@@ -3159,7 +3219,6 @@ var config = {
         var selecting = false;
         var selectedOption;// = selectedMenu[selected];
         process.stdin.on('keypress', (chunk, key) => {
-            if (snakeRunning) return;
             var k = key.name || key.sequence;
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
@@ -3168,19 +3227,21 @@ var config = {
             //consolelog(key);
             //consolelog(k);
             if (isGettingInput) {
-                if (key.ctrl && key.sequence == `c`) return inputDone(true);
+                if (key.ctrl && key.name == `c`) return inputDone(true);
                 // return cant be "shifted"
                 if ((key.name == `return` && !key.shift) || (inputReturnAt != -1 && inputCache.length >= inputReturnAt)) return inputDone();
                 if (key.name == `backspace`) {
                     inputCache = inputCache.slice(0, inputCache.length - 1);
-                    draw();
-                    return;
+                    return draw();
                 }
                 if (inputNumbersOnly && isNaN(key.sequence)) return;
                 if (!/^[ -~]+$/.test(key.sequence)) return;
                 inputCache += key.sequence;
-                draw();
-                return;
+                return draw();
+            }
+            if (snakeRunning) {
+                if (key.ctrl && key.name == `c`) return endSnake();
+                return draw();
             }
             var back = selectedMenu.find(x => removeColor(dyn(x.name, x)) == `back`);
             if (key.name == `backspace`) {
@@ -3531,21 +3592,21 @@ var config = {
             if (!fs.existsSync(`${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`)) return r(consolelog(`Cook didnt cook anything :|`, undefined, undefined, undefined, log));
             fs.moveSync(`${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/Content/`, `${tempFolder}PackageInput/Content/`, { overwrite: true });
             const assetRegistry = `${ProjectFolder}Saved/Cooked/WindowsNoEditor/${config.ProjectName}/AssetRegistry.bin`;
-            if (!fs.existsSync(assetRegistry)) return consolelog(`FAILED TO FIND AssetRegistry.bin ${chalk.gray(assetRegistry)}`);
+            if (!fs.existsSync(assetRegistry)) return consolelog(`FAILED TO FIND AssetRegistry.bin ${chalk.gray(assetRegistry)}`, undefined, undefined, undefined, log);
             fs.moveSync(assetRegistry, `${tempFolder}PackageInput/AssetRegistry.bin`, { overwrite: true });
 
             var ch = child.exec(config.cmds.Packing)
                 .on('exit', async () => {
                     var d = fs.readFileSync(config.logging.file);
                     if (d.includes(`LogPakFile: Error: Failed to load `)) {
-                        consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`);
+                        consolelog(`Failed to load ${d.toString().split(`\n`).find(x => x.includes(`LogPakFile: Error: Failed to load `)).replace(`LogPakFile: Error: Failed to load `, ``)}`, undefined, undefined, undefined, log);
                         return r();
                     }
                     fs.rmSync(`${config.drg}/FSD/Mods/${config.ModName}`, { recursive: true, force: true });
                     fs.mkdirSync(`${config.drg}/FSD/Mods/${config.ModName}`);
                     if (!fs.existsSync(`${tempFolder}${config.ModName}.pak`)) {
                         var wrongCook = fs.readdirSync(tempFolder).find(x => x.endsWith(`.pak`));
-                        consolelog(`Failed to cook correct project :)\nYour command:\n${config.cmds.Packing.replace(wrongCook, chalk.red(wrongCook))}`);
+                        consolelog(`Failed to cook correct project :)\nYour command:\n${config.cmds.Packing.replace(wrongCook, chalk.red(wrongCook))}`, undefined, undefined, undefined, log);
                         return r();
                     }
                     fs.renameSync(`${tempFolder}${config.ModName}.pak`, `${config.drg}/FSD/Mods/${config.ModName}/${config.ModName}.pak`);
@@ -3727,13 +3788,13 @@ var config = {
             if (config.DirsToCook.length) { // copy files into a temp folder and cook that
                 var isoF = `${cacheFolder}isoCham/FSD/`; // I would have this all in the "ProjectPath" but an open editor would like that I think
                 let isoLog = consolelog(`Making isolation chamber..`);
-                let folders = fs.readdirSync(`${__dirname}${config.ProjectFile}`.replace(PATH.basename(config.ProjectFile), ``))
+                /*let folders = fs.readdirSync(`${__dirname}${config.ProjectFile}`.replace(PATH.basename(config.ProjectFile), ``))
                     .filter(x => ![
                         PATH.basename(config.backup.folder),
                         `compiler`,
                         `Content`
-                    ].includes(x));
-                /*let folders = [
+                    ].includes(x));*/
+                let folders = [
                     `Intermediate`,
                     `Plugins`,
                     //`Saved`,
@@ -3741,19 +3802,21 @@ var config = {
                     `Config`,
                     `Binaries`,
                     `${config.ProjectName}.uproject`,
-                ];*/
+                ];
                 cmd = cmd.replace(`${platform.includes(`wine`) ? W__dirname : __dirname}${config.ProjectFile}`, `${isoF}${folders.find(x => x.endsWith(`.uproject`))}`);
                 //folders = [];
-                for (var i = 0; i < folders.length; i++) {
+                // update folders
+                /*for (var i = 0; i < folders.length; i++) {
                     let f = folders[i];
                     consolelog(`Updating chamber project ${chalk.cyan(i + 1)}/${chalk.cyan(folders.length)} ${chalk.gray(f)}`, undefined, undefined, undefined, isoLog);
                     if (fs.existsSync(`${isoF}${f}`))
                         fs.rmSync(`${isoF}${f}`, { recursive: true, force: true });
                     fs.copySync(`${ProjectPath}/${f}`, `${isoF}${f}`);
-                }
+                }*/
                 let isolationCount = 0;
                 consolelog(`Isolating files..`, undefined, undefined, undefined, isoLog);
-                for (var i = 0; i < config.DirsToCook.length; i++) {
+                // update /content
+                /*for (var i = 0; i < config.DirsToCook.length; i++) {
                     let x = config.DirsToCook[i];
                     consolelog(`Isolating ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)} ${chalk.gray(x)} ...`, undefined, undefined, undefined, isoLog);
                     try {
@@ -3765,7 +3828,7 @@ var config = {
                     } catch (e) {
                         consolelog(`Isolation failed ${chalk.redBright(x)}`);
                     }
-                }
+                }*/
                 consolelog(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)}`, undefined, undefined, undefined, isoLog);
             }
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);

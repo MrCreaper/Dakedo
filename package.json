@@ -21,14 +21,14 @@
   "dependencies": {
     "find-process": "^1.4.7",
     "form-data": "^4.0.0",
-    "fs-extra": "^11.0.0",
+    "fs-extra": "^11.1.0",
     "fswin": "^3.22.106",
     "ini": "^3.0.1",
     "open": "^8.4.0",
     "zip-lib": "^0.7.3"
   },
   "devDependencies": {
-    "@angablue/exe": "^1.1.6",
+    "@angablue/exe": "^1.2.0",
     "pkg": "^5.8.0"
   },
   "pkg": {
