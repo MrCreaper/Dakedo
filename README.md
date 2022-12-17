@@ -22,21 +22,23 @@ An all-in-one for everything needed to make DRG mods and more
   - `backup`
   - `list backups`
     - `{id} - {modname} - {since} - {size}`
-      - Key [i] shows info
-      - Key [v] verifies it
+      - [i] shows info
+      - [v] verifies
+      - [o] open in explorer
   - `settings`
   - `drg`
   - `misc`
     - `update`
       - `dakedo`
       - `project`
-      - `project (toucan)`
-      - `project (template)`
+      - `project (`[`toucan`](https://github.com/Touci/Toucan-DRG-Framework)`)`
+      - `project (`[`template`](https://github.com/DRG-Modding/FSD-Template)`)`
       - `project (unpack)`
       - `generate template`
         - Supposed to make using [UE4SS](https://github.com/UE4SS/UE4SS) simpler
     - `export`
       - `{paks from /FSD/Mods}`
+        - [d] deletes the .pak folder
       - `textures`
       - `textures flat`
       - `make empty dirs`
@@ -52,6 +54,7 @@ An all-in-one for everything needed to make DRG mods and more
     - `add desktop shortcut`
       - Only shown on linux and not added
     - `download mod`
+      - [o] opens the mods folder
       - Downloads mod into /FSD/Mods/{name}/{pak}
     - `debug`
       - No.

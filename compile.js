@@ -741,13 +741,14 @@ var config = {
         templateVersion: ``,
         templateVersionCheck: ``,
         selectedPreset: ``,
+        loadedBackup: [], // list of loaded backups by mod folder name
     };
     const cacheFolder = `${__dirname}/cache/`;
     if (!fs.existsSync(cacheFolder)) {
         fs.mkdirsSync(cacheFolder);
         if (platform == `win`)
             fswin.setAttributesSync(cacheFolder, {
-                IS_HIDDEN: true,
+                IS_shown: true,
             });
     }
     const cachePath = `${cacheFolder}cache.json`;
@@ -785,7 +786,7 @@ var config = {
         fs.mkdirSync(tempFolder);
         if (platform == `win`)
             fswin.setAttributesSync(tempFolder, {
-                IS_HIDDEN: true
+                IS_shown: true
             });
     }
 
@@ -882,7 +883,7 @@ var config = {
             };
             var form = ObjectToForm(body);
 
-            var options = {
+            var req = https.request({
                 hostname: 'api.mod.io',
                 port: 443,
                 path: `/v1/games/${config.modio.gameid}/mods/${config.modio.modid}/files`,
@@ -892,9 +893,7 @@ var config = {
                     ...form.getHeaders(),
                     'Accept': 'application/json',
                 },
-            };
-
-            var req = https.request(options, (res) => {
+            }, (res) => {
                 var data = [];
                 res.on('data', (d) => data.push(d));
                 req.on(`close`, async () => {
@@ -1233,6 +1232,96 @@ var config = {
         })
     }
 
+    function workWCooked() {
+        var configFile = `${ProjectPath}Config/DefaultGame.ini`;
+        var lines = [
+            `[/Script/UnrealEd.CookerSettings]`,
+            `cook.AllowCookedDataInEditorBuilds=True`,
+            `s.AllowUnversionedContentInEditor=1`,
+        ];
+    }
+
+    module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName].concat(config.DirsToCook), clear = false) {
+        // split up folders for whitelist
+        var newList = [];
+        whitelist.forEach(x => {
+            newList.push(x);
+            var split = x.split(`/`);
+            var pile = [];
+            for (var i = 0; i < split.length - 1; i++) {
+                pile.push(split[i]);
+                var p = pile.join(`/`);
+                if (!newList.includes(p))
+                    newList.push(p);
+            }
+        });
+        whitelist = newList;
+        // get config
+        var configFile = `${ProjectPath}Config/DefaultGame.ini`;
+        if (!fs.existsSync(configFile)) {
+            fs.mkdirsSync(configFile);
+            fs.writeFileSync(``, configFile);
+            consolelog(`Failed to find ${chalk.redBright(PATH.basename(configFile))}`);
+        }
+        // read
+        var read = fs.readFileSync(configFile, `utf8`).toString();
+        read = read.split(getLineBreakChar(read));
+
+        // find line
+        var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
+        var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
+        var headerIndex = read.findIndex(x => x.includes(header));
+        dirsIndex = headerIndex;
+        if (dirsIndex == -1) {
+            // if cant find the variables, find the header
+            dirsIndex = headerIndex;
+            if (dirsIndex == -1) // fuck it, add the header
+                dirsIndex = read.push(header);
+        }
+        var musts = [
+            `BuildConfiguration=PPBC_Shipping`,
+            `UsePakFile=False`,
+            `bShareMaterialShaderCode=False`, // https://forums.unrealengine.com/t/why-are-my-materials-not-rendering-after-updating-to-4-25-any-help-is-greatly-appreciated/466154/5
+        ];
+        musts.forEach(x => {
+            var key = x.split(`=`)[0];
+            var val = x.split(`=`)[1];
+            // find old value
+            var i = read.findIndex(x => x.includes(key));
+            // update or add value
+            if (i == -1)
+                read.splice(dirsIndex, 0, x); // add
+            else
+                read.splice(i, 1, x); // update
+        });
+        // remove all old never cooks
+        read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
+        // find and add new never cooks
+        var dirs = [];
+        addDir();
+        whitelist.forEach(x => {
+            var split = x.split(`/`);
+            var pile = ``;
+            for (var i = 0; i < split.length - 1; i++) {
+                pile += `${split[i]}/`;
+                addDir(pile);
+            }
+        });
+        function addDir(dir = ``) { // ends with /
+            fs.readdirSync(`${ProjectPath}Content/${dir}`).forEach(x => {
+                if (!whitelist.includes(x))
+                    dirs.push(`${dir}${x}`);
+            });
+        }
+        dirs = dirs.concat(config.DirsToNeverCook);
+        dirs.forEach(x => {
+            if (!clear)
+                if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
+                    read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
+        });
+        fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
+    }
+
     const backupInfo = `backupinfo.json`;
     module.exports.backup = backup = function (full = config.backup.all, limit = config.backup.max != -1, meta = {}) {
         if (!config.backup.folder) return;
@@ -1376,99 +1465,37 @@ var config = {
         })
     };
 
-    module.exports.refreshDirsToNeverCook = refreshDirsToNeverCook = function (whitelist = [config.ModName].concat(config.DirsToCook), clear = false) {
-        // split up folders for whitelist
-        var newList = [];
-        whitelist.forEach(x => {
-            newList.push(x);
-            var split = x.split(`/`);
-            var pile = [];
-            for (var i = 0; i < split.length - 1; i++) {
-                pile.push(split[i]);
-                var p = pile.join(`/`);
-                if (!newList.includes(p))
-                    newList.push(p);
-            }
-        });
-        whitelist = newList;
-        // get config
-        var configFile = `${ProjectPath}Config/DefaultGame.ini`;
-        if (!fs.existsSync(configFile)) {
-            fs.mkdirsSync(configFile);
-            fs.writeFileSync(``, configFile);
-            consolelog(`Failed to find ${chalk.redBright(PATH.basename(configFile))}`);
-        }
-        // read
-        var read = fs.readFileSync(configFile, `utf8`).toString();
-        read = read.split(getLineBreakChar(read));
-
-        // find line
-        var dirsIndex = read.findIndex(x => x.includes(`+DirectoriesToNeverCook=(Path="/Game/`));
-        var header = `[/Script/UnrealEd.ProjectPackagingSettings]`;
-        var headerIndex = read.findIndex(x => x.includes(header));
-        dirsIndex = headerIndex;
-        if (dirsIndex == -1) {
-            // if cant find the variables, find the header
-            dirsIndex = headerIndex;
-            if (dirsIndex == -1) // fuck it, add the header
-                dirsIndex = read.push(header);
-        }
-        var musts = [
-            `BuildConfiguration=PPBC_Shipping`,
-            `UsePakFile=False`,
-            `bShareMaterialShaderCode=False`, // https://forums.unrealengine.com/t/why-are-my-materials-not-rendering-after-updating-to-4-25-any-help-is-greatly-appreciated/466154/5
-        ];
-        musts.forEach(x => {
-            var key = x.split(`=`)[0];
-            var val = x.split(`=`)[1];
-            // find old value
-            var i = read.findIndex(x => x.includes(key));
-            // update or add value
-            if (i == -1)
-                read.splice(dirsIndex, 0, x); // add
-            else
-                read.splice(i, 1, x); // update
-        });
-        // remove all old never cooks
-        read = read.filter(x => !x.includes(`+DirectoriesToNeverCook=`))
-        // find and add new never cooks
-        var dirs = [];
-        addDir();
-        whitelist.forEach(x => {
-            var split = x.split(`/`);
-            var pile = ``;
-            for (var i = 0; i < split.length - 1; i++) {
-                pile += `${split[i]}/`;
-                addDir(pile);
-            }
-        });
-        function addDir(dir = ``) { // ends with /
-            fs.readdirSync(`${ProjectPath}Content/${dir}`).forEach(x => {
-                if (!whitelist.includes(x))
-                    dirs.push(`${dir}${x}`);
-            });
-        }
-        dirs = dirs.concat(config.DirsToNeverCook);
-        dirs.forEach(x => {
-            if (!clear)
-                if (!whitelist.includes(x) && fs.statSync(`${ProjectPath}Content/${x}`).isDirectory()) // so mods in the same folder get cooked (if the user wants ofc) AND isnt a file
-                    read.splice(dirsIndex + 1, 0, `+DirectoriesToNeverCook=(Path="/Game/${x}")`)
-        });
-        fs.writeFileSync(configFile, read.filter(x => x != ``).join(`\n`));
-    }
-
+    const latestBackupSuffix = `Latest`;
     module.exports.loadbackup = loadbackup = async function (id) {
-        if (!id)
-            if (!fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`))
-                consolelog(`Missing id.`)
-            else {
-                var log = consolelog(`Unloading backup...`);
-                if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`))
-                    fs.rmSync(`${ProjectPath}Content/${config.ModName}`, { recursive: true, force: true });
-                fs.renameSync(`${ProjectPath}Content/${config.ModName} Latest`, `${ProjectPath}Content/${config.ModName}`);
-                consolelog(`Unloaded backup.`, undefined, undefined, undefined, log);
-                return;
+        var searchedLB = cache.loadedBackup.concat(
+            fs.readdirSync(`${ProjectPath}Content/`)
+                .map(x => {
+                    if (!x.endsWith(latestBackupSuffix)) return;
+                    return x.replace(latestBackupSuffix, ``);
+                })
+                .filter(x => x)
+        );
+        cache.loadedBackup = searchedLB.filter(function (elem, pos) {
+            return searchedLB.indexOf(elem) == pos;
+        });
+        if (!id && cache.loadedBackup.length != 0) {
+            for (let i = 0; i < cache.loadedBackup.length; i++) {
+                let n = cache.loadedBackup[i];
+                var log = consolelog(`Unloading backup for ${chalk.cyan(n)}...`);
+                // remove old backup
+                if (fs.existsSync(`${ProjectPath}Content/${n}`))
+                    fs.rmSync(`${ProjectPath}Content/${n}`, { recursive: true, force: true });
+                // bring back latest
+                if (fs.existsSync(`${ProjectPath}Content/${n}${latestBackupSuffix}`)) {
+                    fs.renameSync(`${ProjectPath}Content/${n}${latestBackupSuffix}`, `${ProjectPath}Content/${n}`);
+                    consolelog(`Unloaded backup for ${chalk.cyan(n)}.`, undefined, undefined, undefined, log);
+                } else consolelog(`Missing latest version for ${chalk.cyan(n)}..?`, undefined, undefined, undefined, log);
+                cache.loadedBackup = cache.loadedBackup.splice(i + 1);
+                writeCache();
+                i--;
             }
+            return;
+        }
         if (!isNaN(id) && !Number.isInteger(parseInt(id))) return consolelog(`Invalid id. ${id}`); // custom ids would be nice
         var backuppath = fs.readdirSync(config.backup.folder).find(x => x.startsWith(`${id} - `))
         if (!backuppath) return consolelog(`Invalid backup id!`);
@@ -1481,25 +1508,31 @@ var config = {
         };
         if (fs.existsSync(`${config.backup.folder}/${backuppath}/${backupInfo}`)) {
             var rawInfo = fs.readFileSync(`${config.backup.folder}/${backuppath}/${backupInfo}`);
-            if (isJsonString(rawInfo))
+            if (isJsonString(rawInfo)) {
                 info = JSON.parse(rawInfo);
-        }
+                consolelog(info.date);
+                info.date = new Date(info.date);
+            } else return consolelog(`Backup has an invalid ${backupInfo} >:(`);
+        } else return consolelog(`I dont want to load a backup without ${backupInfo}.. :(`);
 
-        if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`) && fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`)) {
+        // Remove already loaded backup
+        if (fs.existsSync(`${ProjectPath}Content/${info.modname}`) && fs.existsSync(`${ProjectPath}Content/${info.modname}${latestBackupSuffix}`)) {
             consolelog(`Backup already loaded, removing.`);
-            fs.rmSync(`${ProjectPath}Content/${config.ModName}`, { recursive: true, force: true });
+            fs.rmSync(`${ProjectPath}Content/${info.modname}`, { recursive: true, force: true });
         }
 
-        if (fs.existsSync(`${ProjectPath}Content/${config.ModName}`))
-            fs.renameSync(`${ProjectPath}Content/${config.ModName}`, `${ProjectPath}Content/${config.ModName} Latest`);
+        if (fs.existsSync(`${ProjectPath}Content/${info.modname}`))
+            fs.renameSync(`${ProjectPath}Content/${info.modname}`, `${ProjectPath}Content/${info.modname}${latestBackupSuffix}`);
         if (folder.endsWith(`.zip`))
-            await zl.extract(backuppath, `${ProjectPath}Content/${config.ModName}`);
+            await zl.extract(backuppath, `${ProjectPath}Content/${info.modname}`);
         else {
-            if (!fs.existsSync(`${config.backup.folder}/${backuppath}/${config.ModName}`)) return consolelog(`Backup dosent include mod folder.\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${config.backup.folder}/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`, undefined, undefined, undefined, log);
-            fs.copySync(`${config.backup.folder}/${backuppath}/${config.ModName}`, `${ProjectPath}Content/${config.ModName}`);
+            if (!fs.existsSync(`${config.backup.folder}/${backuppath}/${info.modname}`)) return consolelog(`Backup dosent include mod folder (${info.modname}).\n${chalk.cyan(backuppath)} includes:\n${fs.readdirSync(`${config.backup.folder}/${backuppath}`).map(x => chalk.cyan(x)).join(`, `)}`, undefined, undefined, undefined, log);
+            fs.copySync(`${config.backup.folder}/${backuppath}/${info.modname}`, `${ProjectPath}Content/${info.modname}`);
         }
         refreshDirsToNeverCook();
-        consolelog(`Backup loaded!${info.verified ? ` ${chalk.greenBright(`✓`)}` : ``} ${chalk.cyan(info.id)} from ${chalk.cyan(since(info.date))} ago`, undefined, undefined, undefined, log);
+        writeCache();
+        cache.loadedBackup.push(info.modname);
+        consolelog(`Backup loaded!${info.verified ? ` ${chalk.greenBright(`✓`)}` : ``} ${chalk.cyan(info.modname)} from ${chalk.cyan(since(info.date))} ago`, undefined, undefined, undefined, log);
     }
 
     module.exports.extract = extract = (
@@ -2055,8 +2088,10 @@ var config = {
                 var val = set[key];
                 if (typeof val != typeof getV()) return consolelog(`Preset "${selectedPresetKey}" value "${key}" isnt the correct type "${typeof getV(config)}"`);
                 if (typeof val == `object` && !Array.isArray(val)) return applyPreset(val, path.concat([key]));
-                consolelog(`${chalk.cyan(key)}: ${chalk.gray(getV())} => ${chalk.hex(/*key == `ModName` ? staticC(val) :*/ getValueColor(val))(val)}`);
-                setV(val);
+                if (getV() != val) {
+                    consolelog(`${chalk.cyan(key)}: ${chalk.gray(getV())} => ${chalk.hex(/*key == `ModName` ? staticC(val) :*/ getValueColor(val))(val)}`);
+                    setV(val);
+                }
             });
         }
         config = unVaredConfig;
@@ -2116,7 +2151,7 @@ var config = {
     if (config.update) update();
 
     function getOptionIndex(name = `cook`, menu = selectedMenu) {
-        return menu.filter(x => x.hidden ? x.hidden() : true).findIndex(x => x.name == name);
+        return menu.filter(x => x.shown ? x.shown() : true).findIndex(x => x.name == name);
     }
 
     var mainMenu = [
@@ -2136,7 +2171,7 @@ var config = {
             name: (self) => self.running == undefined ? `publish` : (self.running == false ? `published` : `publishing`),
             color: `#00FFFF`,
             run: publish,
-            hidden: () => config.modio.token && config.modio.gameid && config.modio.modid,
+            shown: () => config.modio.token && config.modio.gameid && config.modio.modid,
         },
         {
             name: `backup`,
@@ -2144,10 +2179,14 @@ var config = {
             run: () => backup(),
         },
         {
-            name: `unload backup`,
+            name: `unload backup${cache.loadedBackup.concat(
+                fs.readdirSync(`${ProjectPath}Content/`).filter(x => x.endsWith(latestBackupSuffix))
+            ) > 1 ? `s` : ``}`,
             color: `#ffa500`,
             run: () => loadbackup(),
-            hidden: () => fs.existsSync(`${ProjectPath}Content/${config.ModName} Latest`),
+            shown: () => cache.loadedBackup.concat(
+                fs.readdirSync(`${ProjectPath}Content/`).filter(x => x.endsWith(latestBackupSuffix))
+            ).length != 0,
         },
         { // shows backups which you can load
             name: `list backups`,
@@ -2214,6 +2253,10 @@ var config = {
                                     const savedSelected = selected;
                                     self.run(self);
                                     selected = savedSelected;
+                                    break;
+                                case `o`:
+                                    let log = consolelog(`Opening ${x} ...`);
+                                    openExplorer(`${config.backup.folder}/${x}`, () => consolelog(`Opened`, undefined, undefined, undefined, log));
                                     break;
                                 case `i`: // info
                                     var infoList = [
@@ -2291,7 +2334,7 @@ var config = {
                 selectedMenu = listBackupOptions;
                 selected = 0;
             },
-            hidden: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
+            shown: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
         },
         {
             name: `settings`,
@@ -2345,9 +2388,7 @@ var config = {
                                     }
                                     //val  = get();
                                     var setting = {
-                                        name: () =>
-                                            `${path.concat(key).join(` > `)}`.replace(key, chalk.hex(getValueColor(val))(key))
-                                        ,
+                                        name: () => `${path.concat(key).join(` > `)}`.replace(key, chalk.hex(getValueColor(val))(key)),
                                         run: async (self) => {
                                             // I hate nodejs values and refrences
                                             function set(newValue, object = unVaredConfig, stack = JSON.parse(JSON.stringify(path))) {
@@ -2393,7 +2434,7 @@ var config = {
                         selectedMenu.push(category);
                 }
             },
-            hidden: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
+            shown: () => fs.existsSync(config.backup.folder) && fs.readdirSync(config.backup.folder).length,
         },
         {
             name: (self) => self.running == undefined ? `drg` : self.running == false ? `drg` : `launching...`,
@@ -2542,6 +2583,18 @@ var config = {
                                                 r();
                                             })
                                         },
+                                        key: (k, self) => {
+                                            switch (k) {
+                                                case `d`:
+                                                    fs.rmSync(PATH.dirname(x), { recursive: true, force: true });
+                                                    selectedMenu.splice(selectedMenu.findIndex(y => y == self), 1);
+                                                    break;
+                                                case `o`:
+                                                    let log = consolelog(`Opening ${x} ...`);
+                                                    openExplorer(x, () => consolelog(`Opened`, undefined, undefined, undefined, log));
+                                                    break;
+                                            }
+                                        },
                                     });
                                 });
                             selectedMenu = exportMenu;
@@ -2590,18 +2643,24 @@ var config = {
                             selectedMenu = presetMenu;
                             selected = 0;
                         },
-                        hidden: () => Object.keys(config.presets).length != 0,
+                        shown: () => Object.keys(config.presets).length != 0,
                     },
                     { // feels like a bit too in-your-face, but its in the misc menu so its not THAT in-your-face
                         name: `make mod`,
                         color: `#ff8c00`,
                         run: async () => {
                             var modName = await getInput(`New mod name:`);
+                            if (!modName) return;
                             fs.copySync(`${ProjectPath}Content/Toucan/template`, `${ProjectPath}Content/${modName}`);
                             fs.renameSync(`${ProjectPath}Content/${modName}/templateMain.uasset`, `${ProjectPath}Content/${modName}/${modName}Main.uasset`);
+                            unVaredConfig.presets[modName] = confifg.preset[modName] = {
+                                "ModName": modName,
+                            };
+                            writeConfig();
+                            setPreset(modName);
                             consolelog(`Made mod "${modName}"`);
                         },
-                        hidden: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
+                        shown: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
                     },
                     {
                         name: `add desktop shortcut`,
@@ -2624,7 +2683,7 @@ var config = {
                             fs.copySync(`${__dirname}/creaper.png`, `/home/${username}/.local/share/applications/creaper.png`);
                             consolelog(`Shortcut added`);
                         },
-                        hidden: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${capitalize(package.name)}.desktop`),
+                        shown: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${capitalize(package.name)}.desktop`),
                     },
                     {
                         name: `go go`, // or just add -nosplash to start args
@@ -2636,13 +2695,22 @@ var config = {
                                 fs.rmSync(`${config.drg}/FSD/Content/Splash`, { recursive: true, force: true });
                             consolelog(`Cleared`);
                         },
-                        hidden: () => fs.existsSync(`${config.drg}/FSD/Content/Movies`) || fs.existsSync(`${config.drg}/FSD/Content/Splash`),
+                        shown: () => fs.existsSync(`${config.drg}/FSD/Content/Movies`) || fs.existsSync(`${config.drg}/FSD/Content/Splash`),
                     },
                     {
                         name: `download ${chalk.cyan(`mod`)}`,
                         color: `#ffffff`,
+                        key: (k, self) => {
+                            switch (k) {
+                                case `o`:
+                                    let log = consolelog(`Opening the mods folder...`);
+                                    openExplorer(`${config.drg}/FSD/Mods/$`, () => consolelog(`Opened`, undefined, undefined, undefined, log));
+                                    break;
+                            }
+                        },
                         run: async (self) => {
                             var modid = await getInput(`mod id:`, true);
+                            if (!modid) return;
                             if (!config.modio.apikey) return consolelog(`No given api key`);
                             var mLog = consolelog(`Finding mod...`);
                             var resp = await getJson(`https://api.mod.io/v1/games/${config.modio.gameid}/mods/${modid}?api_key=${config.modio.apikey}`);
@@ -2938,6 +3006,29 @@ var config = {
                                     },
                                 },
                                 {
+                                    name: `dump config`,
+                                    color: `#ffffff`,
+                                    run: async (self) => {
+                                        consolelog(config);
+                                    }
+                                },
+                                {
+                                    name: `os`,
+                                    color: `#ffffff`,
+                                    run: async (self) => {
+                                        consolelog({
+                                            type: os.type(),
+                                            machine: os.machine(),
+                                            arch: os.arch(),
+                                            name: os.hostname(),
+                                            arch: os.arch(),
+                                            release: os.release(),
+                                            version: os.version(),
+                                            user: os.userInfo(),
+                                        });
+                                    }
+                                },
+                                {
                                     name: `echo`,
                                     color: `#ffffff`,
                                     run: async (self) => {
@@ -2956,6 +3047,12 @@ var config = {
                                         });
                                         consolelog(`Cleared`);
                                     }
+                                },
+
+                                {
+                                    name: `update modio cache`,
+                                    color: `#ffffff`,
+                                    run: () => updateCache(),
                                 },
                                 {
                                     name: `explore`,
@@ -2999,7 +3096,7 @@ var config = {
                             selectedMenu = debugMenu;
                             selected = 0;
                         },
-                        //hidden: () => !process.pkg,
+                        //shown: () => !process.pkg,
                     },
                 ];
                 selectedMenu = miscMenu;
@@ -3016,9 +3113,92 @@ var config = {
         {
             name: `Summon project`,
             color: `#ffffff`,
-            run: () => {
+            run: async () => {
+                let log = consolelog(`Making compiler location..`);
                 fs.mkdirsSync(`${__dirname}/${config.ProjectName}/${capitalize(package.name)}`);
-                fs.moveSync(__filename, `${__dirname}/${config.ProjectName}/${PATH.basename(__filename)}`);
+                consolelog(`Moving ${capitalize(package.name)}..`, undefined, undefined, undefined, log);
+                fs.moveSync(__filename, `${__dirname}/${config.ProjectName}/${capitalize(package.name)}/${PATH.basename(__filename)}`);
+                consolelog(`Summoning project..`, undefined, undefined, undefined, log);
+                await updateProject();
+                if (fs.existsSync(cachePath))
+                    fs.rmSync(cachePath, { recursive: true, force: true });
+                consolelog(`Project summoned! Find me in\n${config.ProjectName}/${capitalize(package.name)}/${PATH.basename(__filename)}`, undefined, undefined, undefined, log);
+                exitHandler();
+            },
+        },
+        {
+            name: `Install epic`,
+            color: `#ffffff`,
+            run: async () => {
+                let log = consolelog(`Downloading epic launcher installer..`);
+                switch (platform) {
+                    case `win`:
+                        function downloadW(url, filePath) {
+                            return new Promise(async r => {
+                                https.get(url, async down => {
+                                    if (down.headers.location) return r(await download(down.headers.location, filePath)); // github redirects to their cdn, and https dosent know redirects :\
+                                    let f = `${__dirname}/installer.msi`;
+                                    var file = fs.createWriteStream(f);
+                                    consolelog(`Downloading installer`, undefined, undefined, undefined, log);
+                                    down.pipe(file
+                                        .on(`finish`, async () => {
+                                            file.close();
+                                            consolelog(`Downloaded installer, launching`, undefined, undefined, undefined, log);
+                                            child.execFile(f)
+                                                .on(`spawn`, () => {
+                                                    consolelog(`Unreal Engien > Libary > Engine Version + > Select engine version ${chalk.bold(`4.27`)} and install :)`, undefined, undefined, undefined, log);
+                                                })
+                                                .on(`exit`, () => {
+                                                    consolelog(`Exited`, undefined, undefined, undefined, log);
+                                                });
+                                        }))
+                                });
+                            })
+                        }
+                        await downloadW(`https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi`);
+                        break;
+                    case `linux`:
+                    case `linuxwine`:
+                        // I could install the install script from lutris and use that but this is nicer
+                        // https://lutris.net/downloads > https://github.com/lutris/lutris/releases (ubuntu)
+                        consolelog(`Downloading lutris...`, undefined, undefined, undefined, log);
+
+                        var resp = await getJson({
+                            hostname: 'api.github.com',
+                            port: 443,
+                            path: `/repos/${`lutris/lutris`}/releases/latest`,
+                            method: 'GET',
+                            headers: {
+                                'User-Agent': `${capitalize(package.name)}/${ver}`,
+                            },
+                        });
+                        const asset = resp.assets.find(x => x.name.includes(`.deb`));
+                        download(asset.browser_download_url);
+                        function download(url) {
+                            https.get(url, down => {
+                                if (down.headers.location) return download(down.headers.location); // github redirects to their cdn, and https dosent know redirects :\
+                                const tempFile = `${filePath}-${new Date().getTime()}`;
+                                fs.renameSync(filePath, tempFile);
+                                var file = fs.createWriteStream(filePath);
+
+                                var size = parseInt(down.headers['content-length']);
+                                var downloaded = 0;
+                                down
+                                    .on(`data`, d => {
+                                        downloaded += d.length;
+                                        consolelog(`Downloading update... ${chalk.cyan((downloaded / size * 100).toFixed(2))}%`, undefined, undefined, undefined, log);
+                                    })
+                                    .pipe(file
+                                        .on(`finish`, async () => {
+                                            file.close();
+                                            consolelog(`Downloaded, directing to epic games store page. Install that.`, undefined, undefined, undefined, log);
+
+                                            await open(`lutris:epic-games-store-standard`);
+                                        }))
+                            });
+                        }
+                        break;
+                }
             },
         }
     ];
@@ -3223,7 +3403,7 @@ var config = {
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
             lastPressDate = new Date();
-            selectedMenu = selectedMenu.filter(x => x.hidden ? x.hidden() : true);
+            selectedMenu = selectedMenu.filter(x => x.shown ? x.shown() : true);
             //consolelog(key);
             //consolelog(k);
             if (isGettingInput) {
@@ -3252,7 +3432,7 @@ var config = {
                 return draw();
             }
             if (selectedOption && selectedOption.key)
-                selectedOption.key(k);
+                selectedOption.key(k, selectedOption);
             switch (k) {
                 case `w`:
                 case `up`:
@@ -3366,7 +3546,7 @@ var config = {
             if (!logMode) {
                 // options
                 // filter hidden
-                options = options.filter(x => x.hidden ? x.hidden() : true);
+                options = options.filter(x => x.shown ? x.shown() : true);
 
                 var longestOption = 0;
                 options.forEach(x => {
@@ -3452,8 +3632,8 @@ var config = {
                 }
             }
 
-            // latest log
-            //process.stdout.cursorTo(Math.floor(process.stdout.truecolumns * .5 - latestLog.length * .5), process.stdout.rows - 2);
+            //${latestBackupSuffix} log
+            //process.stdout.cursorTo(Math.floor(process.stdout.truecolumns * .5 -${latestBackupSuffix}Log.length * .5), process.stdout.rows - 2);
             //process.stdout.write(latestLog);
 
             // reset location
@@ -3646,7 +3826,11 @@ var config = {
                         );
                     }
 
-                    if (config.modio.onCompile) publish();
+                    if (config.modio.onCompile)
+                        publish();
+                    else
+                        if (config.modio.modid)
+                            updateCache();
                     if (config.backup.onCompile) backup();
                     if (config.startDRG) startDrg();
 
@@ -3787,39 +3971,51 @@ var config = {
             refreshDirsToNeverCook(undefined, config.DirsToCook.length ? true : undefined);
             if (config.DirsToCook.length) { // copy files into a temp folder and cook that
                 var isoF = `${cacheFolder}isoCham/FSD/`; // I would have this all in the "ProjectPath" but an open editor would like that I think
+                fs.rmSync(isoF, { recursive: true, force: true });
                 let isoLog = consolelog(`Making isolation chamber..`);
-                /*let folders = fs.readdirSync(`${__dirname}${config.ProjectFile}`.replace(PATH.basename(config.ProjectFile), ``))
-                    .filter(x => ![
-                        PATH.basename(config.backup.folder),
-                        `compiler`,
-                        `Content`
-                    ].includes(x));*/
                 let folders = [
-                    `Intermediate`,
                     `Plugins`,
-                    //`Saved`,
                     `Source`,
                     `Config`,
                     `Binaries`,
                     `${config.ProjectName}.uproject`,
                 ];
+                var noHave = [
+                    PATH.basename(config.backup.folder),
+                    `compiler`,
+                    `Content`,
+                    `Saved`,
+                    capitalize(package.name),
+                ];
+                //folders = fs.readdirSync(`${__dirname}${config.ProjectFile}`.replace(PATH.basename(config.ProjectFile), ``)).filter(x => !noHave.includes(x) && !x.startsWith(`.`));
                 cmd = cmd.replace(`${platform.includes(`wine`) ? W__dirname : __dirname}${config.ProjectFile}`, `${isoF}${folders.find(x => x.endsWith(`.uproject`))}`);
                 //folders = [];
                 // update folders
-                /*for (var i = 0; i < folders.length; i++) {
+                for (var i = 0; i < folders.length; i++) {
                     let f = folders[i];
                     consolelog(`Updating chamber project ${chalk.cyan(i + 1)}/${chalk.cyan(folders.length)} ${chalk.gray(f)}`, undefined, undefined, undefined, isoLog);
                     if (fs.existsSync(`${isoF}${f}`))
                         fs.rmSync(`${isoF}${f}`, { recursive: true, force: true });
-                    fs.copySync(`${ProjectPath}/${f}`, `${isoF}${f}`);
-                }*/
+                    fs.copySync(`${ProjectPath}${f}`, `${isoF}${f}`);
+                }
                 let isolationCount = 0;
                 consolelog(`Isolating files..`, undefined, undefined, undefined, isoLog);
+                for (var i = 0; i < noHave.length; i++)
+                    if (fs.existsSync(`${isoF}${noHave[i]}/`))
+                        fs.rmSync(`${isoF}${noHave[i]}/`, { recursive: true, force: true });
                 // update /content
-                /*for (var i = 0; i < config.DirsToCook.length; i++) {
-                    let x = config.DirsToCook[i];
+                //fs.rmSync(`${isoF}Content/`, { recursive: true, force: true });
+                for (var i = 0; i < config.DirsToCook.length; i++) {
+                    let x = `${config.DirsToCook[i]}`;
                     consolelog(`Isolating ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)} ${chalk.gray(x)} ...`, undefined, undefined, undefined, isoLog);
                     try {
+                        if (!fs.existsSync(`${ProjectPath}/Content/${x}`)) {
+                            let f = fs.readdirSync(PATH.dirname(`${ProjectPath}/Content/${x}`))
+                                //.filter(x => x.endsWith(`.uasset`))
+                                .find(y => y.startsWith(PATH.basename(x)));
+                            if (!f) return consolelog(`File dosent exist\n${x}`);
+                            x = `${PATH.dirname(x)}/${f}`;
+                        }
                         if (fs.existsSync(`${isoF}Content/${x}`))
                             fs.rmSync(`${isoF}Content/${x}`, { recursive: true, force: true });
                         fs.copySync(`${ProjectPath}/Content/${x}`, `${isoF}Content/${x}`);
@@ -3828,7 +4024,7 @@ var config = {
                     } catch (e) {
                         consolelog(`Isolation failed ${chalk.redBright(x)}`);
                     }
-                }*/
+                }
                 consolelog(`Isolated ${chalk.cyan(isolationCount)}/${chalk.cyan(config.DirsToCook.length)}`, undefined, undefined, undefined, isoLog);
             }
             consolelog(`Processing ${chalk.cyan(config.ModName)}`);
