@@ -11,6 +11,7 @@ var config = {
         Packing: "", // auto generated
         UnPacking: "", // auto generated
         CompileAll: "", // auto generated
+        recompile: "", // auto generated
     },
     logging: {
         file: "./logs.txt", // empty for no logs
@@ -518,6 +519,8 @@ var config = {
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract "{path}" "{outpath}"`,
                 UnPacking: `{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe -platform="Windows" -extract {path} {outpath} -unattended -NoLogTimes`,
                 GenerateProject: `{UnrealEngine}/Engine/Binaries/DotNET/UnrealBuildTool.exe -projectfiles -project="{dir}{pf}" -game -rocket -progress`,
+                // {UnrealEngine}/Engine/Binaries/DotNET/UnrealBuildTool.exe Development Win64 -Project="Z:/home/creaper/drg/ammo-percentage-overlay/FSD.uproject" -TargetType=Editor -Progress -NoEngineChanges -NoHotReloadFromIDE
+                // {UnrealEngine}/Engine/Build/BatchFiles/Linux/RunMono.sh {UnrealEngine}/Engine/Binaries/DotNET/UnrealBuildTool.exe {ProjectName} -ModuleWithSuffix {ProjectName} ${Math.floor(Math.random() *  100)} Linux Development -editorrecompile -canskiplink "{dir}{pf}" -progress
             },
             modio: {
                 cache: `C:\\users\\Public\\mod.io\\2475\\`,
@@ -544,6 +547,7 @@ var config = {
                 CompileAll: `wine "{UnrealEngine}/Engine/Binaries/Win64/UE4Editor-Cmd.exe" "{dir}{pf}" "-run=CompileAllBlueprints" "-unattended" "-NoLogTimes"`,
                 Packing: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "{dir}/.temp/{mod}.pak" "-Create="{dir}/.temp/Input.txt"" "-unattended" "-NoLogTimes"`,
                 UnPacking: `wine "{UnrealEngine}/Engine/Binaries/Win64/UnrealPak.exe" "-platform="Windows"" "-extract" "{path}" "{outpath}" "-unattended" "-NoLogTimes"`,
+                recompile: `wine "{UnrealEngine}/Engine/Binaries/DotNET/UnrealBuildTool.exe" "Development" "Win64" "-Project="{dir}{pf}"" "-TargetType=Editor" "-Progress" "-NoEngineChanges" "-NoHotReloadFromIDE"`,
             },
             modio: {
                 cache: `/home/{me}/.local/share/Steam/steamapps/compatdata/548430/pfx/drive_c/users/Public/mod.io/2475/`,
@@ -619,9 +623,7 @@ var config = {
     async function updateConfig(readFromFile = true, updateFile = true, crashable = true) {
         if (!fs.existsSync(configPath)) {
             writeConfig();
-            console.log(`Wrote config.`);
-            exitHandler();
-            return;
+            consolelog(`Wrote config.`);
         }
         if (readFromFile) {
             var tempconfig = fs.readFileSync(configPath);
@@ -768,7 +770,7 @@ var config = {
     }
 
     // temp
-    const tempFolder = `${__dirname}/.temp/`;
+    var tempFolder = `${__dirname}/.temp/`; // having it as const is bad :(
     clearTemp();
     function clearTemp() {
         return new Promise(r => {
@@ -2148,7 +2150,7 @@ var config = {
         consolelog(`User: ${chalk.cyan(username)}`);
         updateConfig();
     }
-    if (config.update) update();
+    if (config.update && new Date() - new Date(cache.myVersionCheck) > 86400000) update(); // 24h
 
     function getOptionIndex(name = `cook`, menu = selectedMenu) {
         return menu.filter(x => x.shown ? x.shown() : true).findIndex(x => x.name == name);
@@ -2615,8 +2617,10 @@ var config = {
                         name: () => {
                             var n = `presets`.split(``);
                             n.forEach((x, i) => {
-                                var c = staticC(Object.values(config.presets)[i].ModName);
-                                n[i] = chalk.hex(c.c)(x);
+                                if (Object.values(config.presets)[i]) {
+                                    var c = staticC(Object.values(config.presets)[i].ModName);
+                                    n[i] = chalk.hex(c.c)(x);
+                                }
                             });
                             return n.join(``);
                         },
@@ -2662,28 +2666,42 @@ var config = {
                         },
                         shown: () => fs.existsSync(`${ProjectPath}Content/Toucan/template`) && !fs.existsSync(`${ProjectPath}Content/template`),
                     },
+                    /*{
+                        name: `shortcut log`,
+                        color: `#ffffff`,
+                        run: (self) => {
+                            consolelog([
+                                __dirname,
+                                PATH.dirname(`${__dirname}../`),
+                                PATH.basename(PATH.dirname(`${__dirname}../`))
+                            ].join(`\n`));
+                        },
+                        shown: false,
+                    },*/
                     {
                         name: `add desktop shortcut`,
                         color: `#ffffff`,
                         run: (self) => {
                             // https://wiki.archlinux.org/title/desktop_entries
                             // https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#recognized-keys
-                            var lines = [
+                            let lines = [
                                 `[Desktop Entry]`,
                                 `Version=1.5`,
-                                `Name=${capitalize(package.name)}`, // required
+                                `Name=${capitalize(package.name)} | ${PATH.basename(PATH.dirname(`${__dirname}../`))}`, // required
                                 `Path=${__dirname}`,
                                 `Type=Application`, // required
                                 `Terminal=true`,
-                                `Exec=${process.argv.join(` `)}`,
+                                `Exec=${process.argv[0].endsWith(`node`) ? process.argv.join(` `) : process.argv[0]}`,
                                 `Comment=${package.description.replace(/\n/g, ` `)}`,
                                 `Icon=/home/${username}/.local/share/applications/creaper.png`,
                             ];
-                            fs.writeFileSync(`/home/${username}/.local/share/applications/${capitalize(package.name)}.desktop`, lines.join(`\n`));
-                            fs.copySync(`${__dirname}/creaper.png`, `/home/${username}/.local/share/applications/creaper.png`);
-                            consolelog(`Shortcut added`);
+                            let n = `${capitalize(package.name)}-${PATH.basename(PATH.dirname(`${__dirname}../`))}`;
+                            fs.writeFileSync(`/home/${username}/.local/share/applications/${n}.desktop`, lines.join(`\n`));
+                            if (!fs.existsSync(`/home/${username}/.local/share/applications/creaper.png`))
+                                fs.copySync(`${__dirname}/creaper.png`, `/home/${username}/.local/share/applications/creaper.png`);
+                            consolelog(`Shortcut for ${PATH.basename(PATH.dirname(`${__dirname}../`))} added`);
                         },
-                        shown: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${capitalize(package.name)}.desktop`),
+                        shown: () => os.platform() == `linux` && !fs.existsSync(`/home/${username}/.local/share/applications/${capitalize(package.name)}-${PATH.basename(PATH.dirname(`${__dirname}../`))}.desktop`),
                     },
                     {
                         name: `go go`, // or just add -nosplash to start args
@@ -2768,6 +2786,19 @@ var config = {
                                         selectedMenu = miscMenu;
                                         selected = getOptionIndex(self.name);
                                     }
+                                },
+                                {
+                                    name: `recompile`,
+                                    color: `#00ff00`,
+                                    run: () => {
+                                        logFile(`Recompiling\n${config.cmds.recompile}\n`);
+                                        var ch = child.exec(config.cmds.recompile);
+                                        ch.on('exit', async () => {
+                                            logFile(`Recompiling exited`);
+                                        })
+                                            .stdout.on('data', (d) => logFile(String(d)));
+                                        children.push(ch);
+                                    },
                                 },
                                 {
                                     name: `snake`,
@@ -2927,7 +2958,7 @@ var config = {
                                     run: (self) => {
                                         var notes = {
                                             "game log": `-log=${__dirname}/fuckinglogs.txt`,
-                                            "start cmd": process.argv0,
+                                            "start cmd": process.argv.join(` `),
                                         };
                                         var notesMenu = [
                                             {
@@ -3058,12 +3089,13 @@ var config = {
                                     name: `explore`,
                                     color: `#ffffff`,
                                     run: async (self) => {
-                                        let folders = {
-                                            "drg": config.drg,
-                                            "mods": `${config.drg}/FSD/Mods`,
-                                            "local": __dirname,
-                                            "metadata": `${config.modio.cache}metadata`,
-                                        };
+                                        let folders = [
+                                            config.drg,
+                                            `${config.drg}/FSD/Mods`,
+                                            __dirname,
+                                            `${config.modio.cache}metadata`,
+                                            `/home/${username}/.local/share/applications/`,
+                                        ];
                                         let exploreMenu = [
                                             {
                                                 name: `back`,
@@ -3074,8 +3106,9 @@ var config = {
                                                 }
                                             },
                                         ];
-                                        Object.keys(folders).forEach(key => {
-                                            let val = folders[key];
+                                        folders.forEach(x => {
+                                            var key = PATH.basename(x)
+                                            let val = x;
                                             exploreMenu.push({
                                                 name: key,
                                                 run: () => {
@@ -3403,7 +3436,7 @@ var config = {
             const doublePress = lastPressKey == k && new Date() - lastPressDate < 1000;
             lastPressKey = k;
             lastPressDate = new Date();
-            selectedMenu = selectedMenu.filter(x => x.shown ? x.shown() : true);
+            selectedMenu = selectedMenu.filter(x => x.shown ? dyn(x.shown) : true);
             //consolelog(key);
             //consolelog(k);
             if (isGettingInput) {
@@ -3546,7 +3579,7 @@ var config = {
             if (!logMode) {
                 // options
                 // filter hidden
-                options = options.filter(x => x.shown ? x.shown() : true);
+                options = options.filter(x => x.shown ? dyn(x.shown) : true);
 
                 var longestOption = 0;
                 options.forEach(x => {

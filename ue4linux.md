@@ -15,6 +15,28 @@
 - no marketplace
 - modio broken
 
+### Setup script
+
+This is gonna take a couple of hours
+
+Run this in the [github download](https://github.com/EpicGames/UnrealEngine)
+
+```bash
+./Setup.sh && ./GenerateProjectFiles.sh && make
+```
+
+### To start
+
+```bash
+./Engine/Binaries/Linux/UE4Editor
+```
+
+### Recompile
+
+```bash
+./Engine/Build/BatchFiles/Linux/Build.sh Linux Development -Project=/home/mr.creaper/Desktop/Toucan/plugins/FSD/FSD.uproject -TargetType=Editor
+```
+
 ## Wine pros and cons
 
 ### pros
