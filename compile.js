@@ -2123,7 +2123,8 @@ var config = {
                     children.splice(children.findIndex(x => x == x), 1);
                 });
         if (err && err != `SIGINT` && err.name && err.message) console.log(err);
-        if (process.pkg && err == undefined) {
+        consolelog(err);
+        if (process.pkg && err != true) {
             if (exiting) return;
             else consolelog(`[ Press any key to exit ]`);
             exiting = true;
@@ -2657,7 +2658,7 @@ var config = {
                             if (!modName) return;
                             fs.copySync(`${ProjectPath}Content/Toucan/template`, `${ProjectPath}Content/${modName}`);
                             fs.renameSync(`${ProjectPath}Content/${modName}/templateMain.uasset`, `${ProjectPath}Content/${modName}/${modName}Main.uasset`);
-                            unVaredConfig.presets[modName] = confifg.preset[modName] = {
+                            unVaredConfig.presets[modName] = config.preset[modName] = {
                                 "ModName": modName,
                             };
                             writeConfig();
@@ -3092,7 +3093,9 @@ var config = {
                                         let folders = [
                                             config.drg,
                                             `${config.drg}/FSD/Mods`,
+                                            `${config.drg}/FSD/Saved/SaveGames/Mods`,
                                             __dirname,
+                                            config.ProjectFile,
                                             `${config.modio.cache}metadata`,
                                             `/home/${username}/.local/share/applications/`,
                                         ];

@@ -19,7 +19,7 @@
 
 This is gonna take a couple of hours
 
-Run this in the [github download](https://github.com/EpicGames/UnrealEngine)
+Run this in the [github download for 4.27.2](https://github.com/EpicGames/UnrealEngine/tree/4.27-plus)
 
 ```bash
 ./Setup.sh && ./GenerateProjectFiles.sh && make
@@ -31,10 +31,10 @@ Run this in the [github download](https://github.com/EpicGames/UnrealEngine)
 ./Engine/Binaries/Linux/UE4Editor
 ```
 
-### Recompile
+### Recompile a project
 
 ```bash
-./Engine/Build/BatchFiles/Linux/Build.sh Linux Development -Project=/home/mr.creaper/Desktop/Toucan/plugins/FSD/FSD.uproject -TargetType=Editor
+./Engine/Build/BatchFiles/Linux/Build.sh Linux Development -Project=/home/.../FSD/FSD.uproject -TargetType=Editor
 ```
 
 ## Wine pros and cons
